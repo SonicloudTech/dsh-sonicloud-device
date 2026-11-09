@@ -62,12 +62,12 @@ test('built client hides shared services, edits per-device preferences, and disp
     slots: { inject: (name, fn) => fn(), register: (options, component) => { registrations.set(options.name, { options, component }); } },
   };
   const ctx = {
-    remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 6); return () => { remoteDisposed = true; }; } },
+    remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 8); return () => { remoteDisposed = true; }; } },
     inject: (services, callback) => { callback(scope); return { dispose: async () => { for (const cleanup of cleanups) await cleanup(); } }; },
   };
   const dispose = await plugin.apply(ctx);
   const settings = registrations.get('settings.section');
-  assert.equal(settings.options.label(), '声云设备'); assert.equal(registrations.has('conversation.input.overlay'), false);
+  assert.equal(settings.options.label(), '声云设备'); assert.equal(registrations.get('conversation.input.overlay').options.id, 'dsh-sonicloud-device-ai-target');
   assert.equal(dom.window.document.querySelector('.dsh-mouse-status'), null);
   const root = createRoot(dom.window.document.getElementById('root'));
   const overlay = registrations.get('shell.overlay');
@@ -86,6 +86,15 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.match(dom.window.document.body.textContent, /2 台设备已连接/);
     assert.doesNotMatch(dom.window.document.body.textContent, /共享语音服务|语音服务 ·|声云 ASR|添加 ASR 服务/);
     assert.equal(catalogCalls, 0);
+    assert.match(dom.window.document.body.textContent, /长按语音打字，松手自动将文字填充到 AI 对话输入框/);
+    assert.equal(dom.window.document.querySelector('[aria-label="AI 键动作"]'), null);
+    const autoSendSwitch = () => dom.window.document.querySelector('[aria-label="自动发送"]');
+    assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'true');
+    assert.match(autoSendSwitch().closest('.dsh-mouse-row').textContent, /AI 键/);
+    await act(async () => autoSendSwitch().click());
+    assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'false');
+    assert.equal((await deviceStore.get('0001')).preferences.aiAutoSend, false);
+    assert.equal((await deviceStore.get('0002')).preferences.aiAutoSend, true);
     for (const [label, count, excluded] of [
       ['识别语言', 43, languageKey({ language: 'zh_cn', accent: 'hakkanese', rlang: '' })],
       ['翻译源语言', 27, 'mn'], ['翻译目标语言', 28, 'ii'],
@@ -137,14 +146,17 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.equal((await deviceStore.get('0001')).preferences.mAction, 'speechSearch');
     assert.equal((await deviceStore.get('0002')).preferences.mAction, 'enter');
     await act(async () => dom.window.document.querySelector('[aria-label="下一台设备"]').click());
+    assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'true');
     assert.equal(dom.window.document.querySelector('[aria-label="M 键动作"]').textContent, '回车');
     assert.match(dom.window.document.body.textContent, /0002/);
     await act(async () => dom.window.document.querySelector('[aria-label="上一台设备"]').click());
+    assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'false');
     assert.equal(dom.window.document.querySelector('[aria-label="搜索引擎"]').textContent, 'bing');
 
     await act(async () => dom.window.document.querySelector('[aria-label="标点符号"]').click());
     assert.equal((await deviceStore.get('0001')).preferences.punctuation, false);
     await act(async () => dom.window.document.querySelector('.dsh-mouse-reset').click());
+    assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'true');
     assert.deepEqual((await deviceStore.get('0001')).preferences, defaultPreferences());
     assert.deepEqual((await deviceStore.get('0002')).preferences, defaultPreferences());
 

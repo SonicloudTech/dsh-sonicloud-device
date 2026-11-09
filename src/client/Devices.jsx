@@ -4,7 +4,7 @@ import { REC_LANG_LIST, TRANS_FROM_LANG_LIST, TRANS_TO_LANG_LIST, DPI_LIST, M_KE
 
 // General Settings keeps its row component private; mirror its layout using host tokens.
 function Row({ label, description, children }) {
-  return <div className="dsh-mouse-row"><div className="dsh-mouse-label"><span>{label}</span>{description && <p>{description}</p>}</div><div className="dsh-mouse-controls">{children}</div></div>;
+  return <div className="dsh-mouse-row"><div className="dsh-mouse-label"><span>{label}</span>{description && <p>{description}</p>}</div>{children && <div className="dsh-mouse-controls">{children}</div>}</div>;
 }
 function Select({ label, value, onChange, options }) {
   const [open, setOpen] = useState(false);
@@ -51,7 +51,9 @@ function DeviceForm({ device, controller, state }) {
         </div></div>}
       </div>
       <Row label="语音键" description="长按语音打字或翻译，松手将文字填充到已获取焦点的输入框"><Select label="语音键动作" value={form.speechAction} options={[{ value: 'voice_input', label: '语音打字' }, { value: 'translate', label: '语音翻译' }]} onChange={value => change('speechAction', value)} /></Row>
-      <Row label="AI 键" description="长按语音打字，松手自动将文字发送给 AI"><Select label="AI 键动作" value={form.aiAction} options={[{ value: 'openAi', label: '打开 AI 对话' }]} onChange={value => change('aiAction', value)} /></Row>
+      <Row label="AI 键" description="长按语音打字，松手自动将文字填充到 AI 对话输入框">
+        <span className="dsh-mouse-switch"><span>自动发送</span><Switch label="自动发送" checked={form.aiAutoSend} onChange={value => change('aiAutoSend', value)} /></span>
+      </Row>
     </div>
     {error && form.mAction !== 'openWebUrl' && <p role="alert" className="dsh-asr-error">{error}</p>}
     <div className="dsh-mouse-footer">

@@ -8,6 +8,7 @@ import { DeviceManager } from '../devices/manager.mjs';
 import { MouseSdk } from '../devices/native.mjs';
 import { DesktopPresentation } from '../desktop/presentation.mjs';
 import { pluginConfigSchema } from '../devices/config.mjs';
+import { AiConversationBridge } from './ai-conversation.mjs';
 
 export const name = 'dsh-sonicloud-device';
 export const inject = ['credentials', 'typert'];
@@ -21,8 +22,9 @@ export class MouseController extends TypertRemoteService {
     // 即使没有设备连接，也完成遗留凭据清理；失败时禁止发起业务请求。
     this.initialized = this.store.state();
     this.initialized.catch(() => {});
+    this.aiConversation = dependencies.aiConversation ?? new AiConversationBridge();
     this.manager = new DeviceManager({ credentials: ctx.credentials, config,
-      sdk: dependencies.sdk ?? new MouseSdk(config.native), ...dependencies,
+      sdk: dependencies.sdk ?? new MouseSdk(config.native), ...dependencies, aiConversation: this.aiConversation,
       prepare: () => this.service(), recognize: request => this.recognize(request),
       translate: request => this.translate(request) });
     ctx.effect(() => () => {
@@ -35,6 +37,8 @@ export class MouseController extends TypertRemoteService {
   saveDevice(sn, revision, preferences) { return this.manager.save(sn, revision, preferences); }
   watch(clientId, signal) { return this.manager.watch(clientId, signal); }
   accept(clientId, sessionId) { return this.manager.accept(clientId, sessionId); }
+  watchAi(clientId, signal) { return this.aiConversation.watch(clientId, signal); }
+  answerAi(clientId, requestId, ok) { return this.aiConversation.answer(clientId, requestId, ok); }
   cancel(clientId, sessionId) { this.manager.assertOwner(clientId); this.manager.cancel(sessionId); return true; }
   provider(sn, service) {
     const key = JSON.stringify([service.tokenUrl, sn]);

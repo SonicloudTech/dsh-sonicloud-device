@@ -156,7 +156,7 @@ namespace Sonicloud {
             string command = Get(item, "command"), incoming = Get(item, "sessionId"); bool ok = true, inserted = false;
             if (command == "begin") {
                 session = incoming; preview = message = ""; phase = "connecting"; active = true;
-                insertion = Get(item, "action") == "speechSearch" ? null : Insertion.Capture();
+                insertion = Get(item, "action") == "speechSearch" || Get(item, "action") == "ai_input" ? null : Insertion.Capture();
                 screen = Screen.FromPoint(Cursor.Position); copy.Text = "复制结果"; Render();
             } else if (incoming.Length > 0 && incoming != session) ok = false;
             else if (command == "result" && active) {

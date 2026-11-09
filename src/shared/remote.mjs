@@ -42,6 +42,11 @@ export const REMOTE = {
     define('watch', [['clientId', id]], event, { mode: 'stream', cancellation: { parameter: 'signal' } }),
     define('accept', [['clientId', id], ['sessionId', id]], z.boolean()),
     define('cancel', [['clientId', id], ['sessionId', id]], z.boolean()),
+    define('watchAi', [['clientId', id]], z.object({
+      requestId: id, sessionId: id, operation: z.enum(['prepare', 'insert', 'release']),
+      expiresAt: z.number().optional(), text: z.string().max(65536).optional(), autoSend: z.boolean().optional(),
+    }), { mode: 'stream', cancellation: { parameter: 'signal' } }),
+    define('answerAi', [['clientId', id], ['requestId', id], ['ok', z.boolean()]], z.boolean()),
   ],
 };
 export const TYPERT = {

@@ -8,10 +8,10 @@ import { MouseSdk } from './native.mjs';
 import { systemAction } from './actions.mjs';
 import { translateText } from './translate.mjs';
 
-const VOICE = new Set(['voice_input', 'translate', 'speechSearch']);
+const VOICE = new Set(['voice_input', 'translate', 'speechSearch', 'ai_input']);
 export class DeviceManager {
-  constructor({ credentials, recognize, prepare = async () => undefined, sdk = new MouseSdk(), action = systemAction, translate = translateText, desktop, config = {} }) {
-    Object.assign(this, { sdk, recognize, prepare, action, translate, desktop, config });
+  constructor({ credentials, recognize, prepare = async () => undefined, sdk = new MouseSdk(), action = systemAction, translate = translateText, desktop, aiConversation, config = {} }) {
+    Object.assign(this, { sdk, recognize, prepare, action, translate, desktop, aiConversation, config });
     this.store = new DeviceStore(credentials);
     this.devices = new Map(); this.clients = new Set(); this.pressed = new Map(); this.pending = Promise.resolve();
     this.status = '尚未连接 SDK'; this.disposed = false;
@@ -159,11 +159,10 @@ export class DeviceManager {
       }
       return;
     }
-    // Use SDK key names directly; AI activation is bound to click only.
-    if (event.key === 'ai' && event.action === 'click') { void this.execute(device.preferences.aiAction); return; }
-    if (event.action !== 'down' || !['speech', 'translation', 'm'].includes(event.key) || this.pressed.has(key)) return;
+    // Click/hold follow the same physical press and must not create another conversation.
+    if (event.action !== 'down' || !['speech', 'translation', 'm', 'ai'].includes(event.key) || this.pressed.has(key)) return;
     this.pressed.set(key, structuredClone(device.preferences));
-    const action = event.key === 'm' ? device.preferences.mAction : event.key === 'translation' ? 'translate' : device.preferences.speechAction;
+    const action = event.key === 'ai' ? 'ai_input' : event.key === 'm' ? device.preferences.mAction : event.key === 'translation' ? 'translate' : device.preferences.speechAction;
     if (!VOICE.has(action)) return;
     if (this.run) { this.publish({ type: 'notice', message: '其他语音会话正在进行，请稍后重试' }); return; }
     let query;
@@ -179,7 +178,23 @@ export class DeviceManager {
     this.run = run;
     if (!this.desktop) run.captureTimer = setTimeout(() => this.fail(run, '界面未响应，请重新打开宿主窗口'), 5000);
     run.durationTimer = setTimeout(() => this.release(run), 600000);
+    // Opening the app/client must not block key-up or device-disconnect events.
+    if (action === 'ai_input') void this.begin(run, device);
+    else await this.begin(run, device);
+  }
+  async prepareAi(run) {
     try {
+      if (!this.aiConversation || !this.desktop) throw new Error('AI 对话功能不可用，请重新加载插件');
+      await this.action('openAi');
+      run.lifetime.signal.throwIfAborted();
+      await this.aiConversation.prepare(run);
+      return {};
+    } catch (error) { return { error }; }
+  }
+  async begin(run, device) {
+    try {
+      if (run.action === 'ai_input') run.aiReady = this.prepareAi(run);
+      if (run.action === 'ai_input' && !this.desktop) throw new Error('AI 对话需要桌面语音浮层');
       if (this.desktop) await this.desktop.begin(run);
       if (this.run !== run || run.closing) return;
       run.service = await this.prepare();
@@ -187,7 +202,7 @@ export class DeviceManager {
       if (await this.sdk.source(device.id) !== 1) throw new Error('无法选定鼠标音频源');
       if (this.run !== run || run.closing) return;
       if (this.desktop) { run.started = true; void this.process(run); }
-      else this.publish({ type: 'request', sessionId: run.id, sn: run.sn, action });
+      else this.publish({ type: 'request', sessionId: run.id, sn: run.sn, action: run.action });
     } catch (error) { this.fail(run, error.message); }
   }
   async execute(action, value) {
@@ -254,7 +269,16 @@ export class DeviceManager {
         text = await this.translate({ sn: run.sn, service: run.service, text, from: run.preferences.from, to: run.preferences.to, signal: run.lifetime.signal, config: this.config.translation });
       }
       if (this.run !== run || run.closing) return;
-      if (run.action === 'speechSearch') {
+      if (run.action === 'ai_input') {
+        const prepared = await run.aiReady;
+        if (this.run !== run || run.closing) return;
+        // Keep the complete text available in the native panel if target preparation/insertion fails.
+        this.publish({ type: 'preview', sessionId: run.id, text });
+        if (prepared.error) throw prepared.error;
+        await this.aiConversation.insert(run, text);
+        if (this.run !== run || run.closing) return;
+        this.publish({ type: 'finished', sessionId: run.id });
+      } else if (run.action === 'speechSearch') {
         await this.action('openUrl', searchAddress(run.preferences.searchUrl, text));
         if (this.run !== run || run.closing) return;
         this.publish({ type: 'finished', sessionId: run.id });
@@ -281,6 +305,7 @@ export class DeviceManager {
     run.closing = true; run.audioEnded = true;
     for (const name of ['captureTimer', 'durationTimer', 'tailTimer', 'uploadTimer']) clearTimeout(run[name]);
     run.lifetime.abort(); run.queue.end(true);
+    if (run.action === 'ai_input') this.aiConversation?.release(run.id);
     try { await this.sdk.source(''); } catch { /* SDK may already be offline. */ }
     if (this.run === run) this.run = undefined;
   }
@@ -290,6 +315,7 @@ export class DeviceManager {
     for (const queue of this.clients) queue.end(true);
     this.clients.clear(); this.owner = undefined;
     this.sdk.off('event', this.onEvent); this.sdk.off('fault', this.onFault);
+    this.aiConversation?.close();
     await this.desktop?.close();
     await this.sdk.close();
   }

@@ -4,6 +4,10 @@
 
 ### Added
 
+- Add a per-device “Auto-send” switch for the AI key, enabled by default. Send the complete draft after recognition and successful insertion when enabled; otherwise only fill the composer. Legacy preferences and restored defaults enable the switch.
+
+- Add hold-to-talk AI-key input targeting the DeepSeek Harness conversation composer: activate Harness, reuse the current conversation or create one from other pages, and append recognized text without requiring input focus. Preserve existing drafts and offer copying on failure.
+
 - Add a standalone desktop voice panel centered above the screen work-area bottom, showing typing, translation and search previews, progress and errors, with cancel and copy controls.
 
 - Add `dev:setup` and `dev` commands to rebuild and reload the plugin and reconnect devices on source saves; failed builds preserve the previous version and saved per-SN preferences remain intact.
@@ -14,6 +18,8 @@
 - Add tests for device isolation, reconnection, translation, search, and settings while retaining ASR protocol and host Gateway integration checks.
 
 ### Changed
+
+- Update the AI-key description to state that holding records speech and releasing fills the AI conversation input; remove the “Open AI conversation” dropdown.
 
 - Dismiss the status pill immediately when recognition completes without speech, instead of leaving a no-speech notice visible.
 
@@ -39,6 +45,8 @@
 - Consolidate the plugin specification in `docs/specs/smart-mouse-plugin.md` and mouse settings, language mappings, and device options in `docs/specs/mouse-settings.md`; provide runtime data through `src/shared/languages.mjs` and `src/shared/mouse-settings.mjs`.
 
 ### Fixed
+
+- Fix AI-key navigation leaving Settings open and failing to fill conversations created from other pages: dismiss Settings, create the conversation in an available workspace, and wait for the target composer before inserting text.
 
 - Fix speech insertion in macOS Zed, which does not expose editable accessibility controls: use guarded paste when the window, document and input activity remain unchanged, restoring prior clipboard formats without overwriting newer copies.
 

@@ -274,7 +274,7 @@ final class VoiceUI: NSObject {
         if name == "begin" {
             session = incoming; preview = ""; message = ""; phase = "connecting"; active = true
             screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
-            insertion = command["action"] as? String == "speechSearch" ? nil : ClipboardInsertion()
+            insertion = ["speechSearch", "ai_input"].contains(command["action"] as? String ?? "") ? nil : ClipboardInsertion()
             resultPending = false
             copyButton.title = "复制结果"; render()
         } else if !incoming.isEmpty && incoming != session { success = false }

@@ -37,7 +37,7 @@ export const preferencesSchema = z.object({
   from: choice(TRANS_FROM_LANG_LIST), to: choice(TRANS_TO_LANG_LIST),
   dpi: choice(DPI_LIST), mAction: choice(M_KEY_FUNC_LIST),
   searchUrl: choice(M_KEY_SEARCH_URL_LIST), linkUrl: z.string().max(4096),
-  speechAction: z.enum(['voice_input', 'translate']), aiAction: z.literal('openAi'),
+  speechAction: z.enum(['voice_input', 'translate']), aiAction: z.literal('openAi'), aiAutoSend: z.boolean(),
 }).strict().superRefine((value, ctx) => {
   if (value.linkUrl || value.mAction === 'openWebUrl') {
     try { webUrl(value.linkUrl); } catch (error) { ctx.addIssue({ code: 'custom', path: ['linkUrl'], message: error.message }); }
@@ -47,11 +47,12 @@ export const preferencesSchema = z.object({
 export const storedPreferencesSchema = preferencesSchema.safeExtend({
   recognition: recognitionValueSchema, from: z.string(), to: z.string(),
   mAction: choice(M_KEY_FUNC_LIST).catch(() => defaultPreferences().mAction),
+  aiAutoSend: z.boolean().default(true),
 });
 export const defaultPreferences = () => ({
   recognition: { language: 'zh_cn', accent: 'mandarin', rlang: '' }, punctuation: true,
   from: 'cn', to: 'en', dpi: '1600', mAction: 'enter',
-  searchUrl: M_KEY_SEARCH_URL_LIST[0].value, linkUrl: '', speechAction: 'voice_input', aiAction: 'openAi',
+  searchUrl: M_KEY_SEARCH_URL_LIST[0].value, linkUrl: '', speechAction: 'voice_input', aiAction: 'openAi', aiAutoSend: true,
 });
 export const snSchema = z.string().min(1).max(128).refine(value =>
   !/^(usb-|ble-)/i.test(value) && !/[\u0000-\u0020]/u.test(value) && !['__proto__', 'prototype', 'constructor'].includes(value), '设备 SN 未确认');

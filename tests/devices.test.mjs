@@ -49,6 +49,20 @@ test('SN preferences isolate devices, survive reconnect, reject stale writes and
   await assert.rejects(store.save('0001', 0, defaultPreferences()), /已变更/);
   for (const sn of ['usb-temp', 'ble-aa', '__proto__', '']) await assert.rejects(store.get(sn));
 });
+test('legacy preferences enable AI auto-send and explicit false survives storage reload', async () => {
+  const credentials = new MemoryCredentials(), store = new DeviceStore(credentials);
+  const legacy = { ...defaultPreferences(), punctuation: false, dpi: '800' };
+  delete legacy.aiAutoSend;
+  await credentials.modifyRecord('dsh-asr/devices', () => ({ kind: 'grant', payload: {
+    version: 1, devices: { '0001': { revision: 3, preferences: legacy } },
+  } }));
+  const loaded = await store.get('0001');
+  assert.deepEqual(loaded, { revision: 3, preferences: { ...legacy, aiAutoSend: true } });
+  await store.save('0001', 3, { ...loaded.preferences, aiAutoSend: false });
+  assert.equal((await new DeviceStore(credentials).get('0001')).preferences.aiAutoSend, false);
+  assert.equal((await store.get('0002')).preferences.aiAutoSend, true);
+  await assert.rejects(store.save('0001', 4, { ...loaded.preferences, aiAutoSend: 'false' }));
+});
 test('two devices share one session; B audio, key release and disconnect never complete A', async () => {
   const s = await fixture();
   try {
@@ -153,19 +167,18 @@ test('SDK m starts and finishes each configured voice action without duplicate s
     assert.deepEqual(s.events.filter(e => e.type === 'result').map(e => e.text), ['你好 & 世界#', 'translated']);
   } finally { await s.stop(); }
 });
-test('SDK ai click activates AI without executing M preferences; down/up and raw releases are ignored', async () => {
+test('AI click and raw releases cannot activate another action or start a voice session', async () => {
   const s = await fixture();
   try {
     await s.connect('0001');
     await s.manager.save('0001', 0, { ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: 'https://example.com/' });
     await s.key('0001', 'click', 'ai');
     await s.send({ type: 'message', id: '0001', message: { type: 'keyEvent', key: 'raw', action: 'up', code: 50, index: 0 } });
-    await s.key('0001', 'down', 'ai'); await s.key('0001', 'up', 'ai');
-    assert.deepEqual(s.actions, [['openAi', undefined]]);
+    assert.deepEqual(s.actions, []);
     assert.equal(s.manager.run, undefined);
     assert.deepEqual(s.sdk.sources, []);
     await s.key('0001', 'click', 'm');
-    assert.equal(s.actions.length, 1);
+    assert.equal(s.actions.length, 0);
   } finally { await s.stop(); }
 });
 test('SDK m freezes settings on down and reconnect clears pending actions', async () => {
