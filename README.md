@@ -10,7 +10,7 @@
 - **自定义按键**：为 M 键选择回车、后退、一键链接等动作；长按 AI 键可唤起 Harness 并向 AI 对话输入框填入语音文字，默认自动发送，可在设备设置关闭。
 - **管理多台鼠标**：查看连接方式、电量和设备序列号，分别保存每台鼠标的语言、按键和灵敏度设置。
 
-插件根据当前鼠标身份自动接入服务，无需手填鉴权配置；完整硬件体验仍待实机验证。
+插件根据当前鼠标身份自动接入服务，无需手填鉴权配置。
 
 ## 使用前准备
 
@@ -18,7 +18,7 @@
 - 支持本插件的声云智能鼠标，通过蓝牙或 2.4G USB 接收器连接。
 - 插件安装包（`.tgz` 文件），以及可访问语音服务的网络。
 
-安装包包含 Apple 芯片 Mac 和 Windows x64 所需的设备组件。当前已确认 Mac 上的 USB 鼠标识别；Windows 及完整语音、按键体验仍待实机验证，其他系统暂不保证可用。
+安装包包含 Apple 芯片 Mac 和 Windows x64 所需的设备组件。维护者已确认完成 0.1.0 的实机验收；其他系统暂不保证可用。
 
 ## 安装与启用
 
@@ -26,17 +26,29 @@
 2. 在终端执行以下命令，将路径替换为你取得的安装包的完整路径：
 
    ```sh
-   dsh plugin --profile desktop add "/绝对路径/dsh-sonicloud-device-0.2.1.tgz"
+   dsh plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.0.tgz"
    ```
 
    文件名以实际安装包为准。Mac 如果提示找不到 `dsh`，可使用：
 
    ```sh
-   "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "/绝对路径/dsh-sonicloud-device-0.2.1.tgz"
+   "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.0.tgz"
    ```
 
 3. 重新启动 Harness，在插件管理中启用 `dsh-sonicloud-device`。
 4. 打开设置，进入侧栏的“声云设备”。
+
+正式版也可按确切版本从 npm 安装：
+
+```sh
+dsh plugin --profile desktop add @sonicloud/dsh-sonicloud-device@0.1.0
+```
+
+若安装提示 `ERR_PNPM_IGNORED_BUILDS` 且指向 `koffi`，按提示在该 profile 的 `pnpm-workspace.yaml` 中为报告的确切 `koffi@版本` 配置 `allowBuilds: true` 后重试；仅批准这一原生依赖。
+
+从旧包迁移时，完全退出 Harness，先运行 `dsh plugin --profile desktop remove dsh-sonicloud-device`，再安装新包。插件实例 ID 仍为 `dsh-sonicloud-device`，按 SN 保存的设备偏好继续使用原存储键；不要删除 profile 数据。
+
+测试包从 [Actions](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/workflows/release.yml) 的运行摘要下载，保留 30 天；下载需要登录 GitHub，解压外层归档后安装其中的 `.tgz`。
 
 ## 开始使用
 
@@ -98,7 +110,7 @@ Mac 上请留意“声云设备”中的占用提示。若显示“已检测到 
 卸载时，完全退出 Harness 后执行：
 
 ```sh
-dsh plugin --profile desktop remove dsh-sonicloud-device
+dsh plugin --profile desktop remove @sonicloud/dsh-sonicloud-device
 ```
 
 Mac 如果找不到 `dsh`，使用安装步骤中的完整命令路径。
@@ -117,3 +129,7 @@ Mac 如果找不到 `dsh`，使用安装步骤中的完整命令路径。
 想修改插件或贡献代码，请阅读[本地开发与代码贡献指南](docs/contributing/development.md)，了解环境准备、调试、测试和提交流程。
 
 版本变更见[更新日志](CHANGELOG.zh.md)。
+
+## 许可
+
+项目代码使用 [MIT 许可](LICENSE)。随包原生 SDK 和第三方库保留各自许可，见 [组件声明](native/THIRD_PARTY_LICENSES.txt)。

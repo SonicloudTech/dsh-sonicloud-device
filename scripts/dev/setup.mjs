@@ -48,8 +48,15 @@ try {
 } catch (error) { if (!['ENOENT', 'ESRCH'].includes(error.code)) throw error; }
 if (watching) await access(join(runtime, 'host.mjs'));
 else await run(process.execPath, [join(root, 'scripts/dev.mjs'), '--once']);
-console.log(`[dev:setup] 将 ${profile} 的 dsh-sonicloud-device 切换为本地开发链接。`);
+let profileManifest;
+try { profileManifest = JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')); }
+catch (error) { if (error.code !== 'ENOENT') throw error; }
+if (profileManifest?.dependencies?.['dsh-sonicloud-device']) {
+  console.log('[dev:setup] 移除旧包依赖；保留 profile 数据与设备偏好。');
+  await run(cli, ['plugin', '--profile', profile, 'remove', 'dsh-sonicloud-device']);
+}
+console.log(`[dev:setup] 将 ${profile} 的 @sonicloud/dsh-sonicloud-device 切换为本地开发链接。`);
 await run(cli, ['plugin', '--profile', profile, 'add', `link:${runtime}`]);
-const linked = await realpath(join(profileDir, 'node_modules/dsh-sonicloud-device'));
-if (linked !== await realpath(runtime)) throw new Error('CLI 未安装预期的本地链接，请检查 profile 中的 dsh-sonicloud-device');
+const linked = await realpath(join(profileDir, 'node_modules/@sonicloud/dsh-sonicloud-device'));
+if (linked !== await realpath(runtime)) throw new Error('CLI 未安装预期的本地链接，请检查 profile 中的 @sonicloud/dsh-sonicloud-device');
 console.log('[dev:setup] 开发链接已安装。运行 npm run dev 并启动 Harness；保持监听进程运行即可自动更新。');

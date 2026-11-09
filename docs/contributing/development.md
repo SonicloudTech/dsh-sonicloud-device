@@ -176,7 +176,7 @@ npm test
 
 ### 当前开发限制
 
-- [CI/CD 发布方案](../specs/ci-cd.md)仍处于计划阶段，不能假定推送后会自动测试或发布。当前包名以 `package.json` 中的 `dsh-sonicloud-device` 为准。
+- [CI/CD 发布流程](../specs/ci-cd.md)：推送 `dev` 构建测试包，推送 `main` 发布正式包。正式发布须先完成 npm Trusted Publisher 配置。包名为 `@sonicloud/dsh-sonicloud-device`，插件实例 ID 不变。
 
 ## 贡献流程
 

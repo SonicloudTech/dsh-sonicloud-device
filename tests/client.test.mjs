@@ -55,7 +55,7 @@ test('built client hides shared services, edits per-device preferences, and disp
   const sandbox = { window: { __ModuleLoader__: { load: value => { entry = value; } } }, document: dom.window.document,
     crypto: globalThis.crypto, URL, AbortController, setTimeout, clearTimeout, console, MutationObserver: dom.window.MutationObserver };
   vm.runInNewContext(await readFile('dist/client.js', 'utf8'), sandbox);
-  assert.equal(entry.id, 'dsh-sonicloud-device');
+  assert.equal(entry.id, '@sonicloud/dsh-sonicloud-device');
   const plugin = entry.factory(name => {
     if (name === 'react') return React;
     if (name === '@deepseek-ai/dsh-client-ui-primitives') return { Button, Modal, Menu, Switch, Input, IconChevronDownOutlineRegular, Toast, IconWarningOutlineRegular };

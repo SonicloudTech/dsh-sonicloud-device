@@ -1,5 +1,5 @@
 {
-  "name": "dsh-sonicloud-device",
+  "name": "@sonicloud/dsh-sonicloud-device",
   "version": "0.1.0",
   "description": "DeepSeek Harness 智能鼠标、多设备设置与共享语音服务",
   "icon": "./src/client/assets/sonicloud.png",
@@ -63,5 +63,14 @@
     "jsdom": "^26.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SonicloudTech/dsh-sonicloud-device.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

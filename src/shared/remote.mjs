@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { preferencesSchema, storedPreferencesSchema, snSchema } from './devices.mjs';
 
-export const PACKAGE = 'dsh-sonicloud-device';
+export const PACKAGE = '@sonicloud/dsh-sonicloud-device';
 const text = z.string().max(4096);
 const id = z.string().max(80);
 const catalog = z.object({ revision: z.number().int(), activeId: id, services: z.array(z.object({

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Add GitHub Actions builds for dev test packages and main releases, with bilingual changelog, package content and integrity checks, and release retry support.
+
+### Changed
+
+- **Breaking change:** Rename the npm package to `@sonicloud/dsh-sonicloud-device`; remove the old package before installing the new one. Preserve the plugin instance ID and device configuration storage keys.
+- License project code under MIT; bundled native components retain their own licenses.
+
 ## 0.1.0 - 2026-11-09
 
 Initial release of the Sonicloud smart mouse plugin for DeepSeek Harness 0.2.1-rc.5 and later.

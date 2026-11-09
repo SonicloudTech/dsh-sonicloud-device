@@ -45,7 +45,7 @@ export async function apply(ctx, config) {
   const pending = new URL('./dist/client.next.js', import.meta.url);
   await copyFile(new URL('./generations/${revision}/client.js', import.meta.url), pending);
   await rename(pending, client);
-  ctx.clientModules.rebuilt('dsh-sonicloud-device');
+  ctx.clientModules.rebuilt('@sonicloud/dsh-sonicloud-device');
   await writeFile(new URL('./applied.json', import.meta.url), JSON.stringify({ revision: '${revision}', pid: process.pid }));
   ctx.logger.info('智能鼠标开发版本已重载：${revision}');
   return cleanup;

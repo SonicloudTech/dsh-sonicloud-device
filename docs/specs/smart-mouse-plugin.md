@@ -2,7 +2,7 @@
 
 ## 1. 范围
 
-目标宿主：DeepSeek Harness `0.2.1-rc.5`。包名与插件 ID：`dsh-sonicloud-device`，当前实现版本：`0.2.1`。
+目标宿主：DeepSeek Harness `0.2.1-rc.5`。包名：`@sonicloud/dsh-sonicloud-device`；插件 ID：`dsh-sonicloud-device`。当前版本以 `package.json` 为准。
 
 本期接入通过 BLE 或 2.4G USB 接收器连接的智能鼠标，提供多设备设置、语音打字、翻译、搜索、DPI 与按键配置。设备模型预留其他类型的扩展能力。
 

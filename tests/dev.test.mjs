@@ -47,7 +47,7 @@ test('development generation reloads nested Host code and only publishes Client 
     await ctx.plugin(TypertRegistry);
     const plugin = await import(pathToFileURL(join(runtime, 'host.mjs')).href);
     const fiber = ctx.plugin(plugin); await fiber;
-    assert.deepEqual(notifications, ['dsh-sonicloud-device']);
+    assert.deepEqual(notifications, ['@sonicloud/dsh-sonicloud-device']);
     assert.equal(JSON.parse(await readFile(join(runtime, 'applied.json'), 'utf8')).revision, second.revision);
     assert.match(await readFile(join(runtime, 'dist/client.js'), 'utf8'), /dev-test/);
     assert.ok(ctx.typert.local.get('asr/watch'));
