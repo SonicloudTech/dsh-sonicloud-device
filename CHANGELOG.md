@@ -4,10 +4,10 @@
 
 ### Changed
 
-- Use English for the default README and preserve the Chinese guide in README.zh.md, with links between both versions and both included in the package.
-- Document CI/CD platform configuration and release verification results with traceable workflow links.
-- Separate device event and speech result handling and share client retry waits, preserving functionality, protocols, and UI.
-- Streamline specifications and development documentation, centralize behavior contracts and verification records, and standardize development on npm by removing the outdated pnpm lockfile and placeholder configuration.
+- Provide an English-default user guide with a Chinese version, UI installation, update, and removal instructions, and screenshots.
+- Refactor device and speech handling and share retry logic, preserving functionality and UI.
+- Streamline specifications and development docs, consolidating CI/CD configuration and release verification records.
+- Standardize on npm and remove outdated pnpm lockfile and configuration.
 
 ## 0.1.1 - 2026-11-09
 

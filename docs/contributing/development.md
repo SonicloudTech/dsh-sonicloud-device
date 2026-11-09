@@ -17,7 +17,7 @@ npm ci
 
 仅修改业务代码时无需更新依赖锁文件。增删或升级依赖使用 `npm install` / `npm uninstall`，同时提交 `package.json` 与 `package-lock.json` 的对应变更。
 
-Harness profile 自身的 pnpm 配置由宿主管理，与本仓库的 npm 开发流程独立；原生依赖安装问题见 [README](../../README.zh.md#安装与启用)。
+Harness profile 自身的 pnpm 配置由宿主管理，与本仓库的 npm 开发流程独立；普通用户通过插件界面安装，见 [README](../../README.zh.md#安装与启用)。
 
 ## 启动开发模式
 
