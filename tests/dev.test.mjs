@@ -56,6 +56,7 @@ test('development generation reloads nested Host code and only publishes Client 
     assert.equal(ctx.typert.local.get('asr/watch'), undefined);
     assert.equal(await readFile(join(first.generation, 'native/fixture.txt'), 'utf8'), 'native-generation-1');
     assert.match(await readFile(join(runtime, 'host.mjs'), 'utf8'), /src\/devices\/native\.mjs/);
+    assert.match(await readFile(join(runtime, 'host.mjs'), 'utf8'), /src\/desktop\/presentation\.mjs/);
   } finally { await ctx.fiber.dispose(); }
 });
 

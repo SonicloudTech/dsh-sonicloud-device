@@ -57,9 +57,9 @@ export async function apply(ctx, config) {
       build({ ...common, platform: 'node', format: 'esm', target: 'node22', packages: 'external',
         stdin: { contents: entry, resolveDir: root, sourcefile: 'dev-host.mjs' }, outfile: join(generation, 'host.mjs'),
         plugins: [{ name: 'development-native-location', setup(builder) {
-          builder.onLoad({ filter: /[/\\]devices[/\\]native\.mjs$/ }, async ({ path }) => ({
+          builder.onLoad({ filter: /[/\\](?:devices[/\\]native|desktop[/\\]presentation)\.mjs$/ }, async ({ path }) => ({
             contents: (await readFile(path, 'utf8')).replaceAll('import.meta.url',
-              JSON.stringify(pathToFileURL(join(generation, 'src/devices/native.mjs')).href)), loader: 'js',
+              JSON.stringify(pathToFileURL(join(generation, path.endsWith('presentation.mjs') ? 'src/desktop/presentation.mjs' : 'src/devices/native.mjs')).href)), loader: 'js',
           }));
         } }],
       }),

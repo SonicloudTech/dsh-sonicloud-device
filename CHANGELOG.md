@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add a standalone desktop voice panel centered above the screen work-area bottom, showing typing, translation and search previews, progress and errors, with cancel and copy controls.
+
 - Add `dev:setup` and `dev` commands to rebuild and reload the plugin and reconnect devices on source saves; failed builds preserve the previous version and saved per-SN preferences remain intact.
 - Add Sonicloud Devices settings with multiple smart mice, per-SN preferences, device switching, connection type, and battery status.
 - Integrate mouse-sdk 0.4.20 with bundled macOS ARM64 and Windows x64 native libraries, running the SDK in a separate process.
@@ -12,6 +14,14 @@
 - Add tests for device isolation, reconnection, translation, search, and settings while retaining ASR protocol and host Gateway integration checks.
 
 ### Changed
+
+- Dismiss the status pill immediately when recognition completes without speech, instead of leaving a no-speech notice visible.
+
+- Use guarded clipboard paste by default on macOS, supporting apps without accessibility write APIs; retain target, focus and input-activity checks and restore the previous clipboard without overwriting newer copies.
+
+- Restyle the desktop voice panel as a 48-point-high pill with vertically centered single-line text, a near-white thin border, an X icon for cancel/close and transparent corners; replace the green dot with an animated waveform.
+
+- Move voice sessions to the plugin backend so minimizing or hiding Harness and disconnecting its UI no longer cancel speech. Insert final text only when the captured target remains unchanged, otherwise retain it for copying. Remove the in-composer voice bar; the backend still stops when Harness exits.
 
 - Allow one-click links without an HTTP/HTTPS scheme; preserve the original address in the input, storage, and browser invocation without adding a scheme.
 
@@ -29,6 +39,8 @@
 - Consolidate the plugin specification in `docs/specs/smart-mouse-plugin.md` and mouse settings, language mappings, and device options in `docs/specs/mouse-settings.md`; provide runtime data through `src/shared/languages.mjs` and `src/shared/mouse-settings.mjs`.
 
 ### Fixed
+
+- Fix speech insertion in macOS Zed, which does not expose editable accessibility controls: use guarded paste when the window, document and input activity remain unchanged, restoring prior clipboard formats without overwriting newer copies.
 
 - Replace the one-click link label and inline messages with a Confirm button beside the input; validate and save only on confirmation, show error toasts without applying invalid edits or failed saves, and show a success toast after saving. Preserve drafts across status updates and late replies, and use the newly saved URL for subsequent button presses.
 

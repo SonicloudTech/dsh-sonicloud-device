@@ -6,6 +6,7 @@ import { translateText } from '../devices/translate.mjs';
 import { TYPERT } from '../shared/remote.mjs';
 import { DeviceManager } from '../devices/manager.mjs';
 import { MouseSdk } from '../devices/native.mjs';
+import { DesktopPresentation } from '../desktop/presentation.mjs';
 import { pluginConfigSchema } from '../devices/config.mjs';
 
 export const name = 'dsh-sonicloud-device';
@@ -85,6 +86,7 @@ export class MouseController extends TypertRemoteService {
 }
 export async function apply(ctx, config = {}) {
   ctx.effect(() => ctx.typert.register(TYPERT));
-  const controller = new MouseController(ctx, config);
+  const controller = new MouseController(ctx, config, { desktop: new DesktopPresentation() });
   await controller.initialized;
+  void controller.manager.start();
 }

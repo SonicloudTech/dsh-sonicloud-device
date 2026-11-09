@@ -70,7 +70,8 @@ dsh plugin --profile desktop add /绝对路径/项目目录/artifacts/实际包�
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/client/` | React 设置界面、语音状态与输入框回填 |
+| `src/client/` | React 设备设置界面与设置反馈 |
+| `src/desktop/`、`native/desktop/` | 桌面浮层进程、私有标准流协议及系统输入框回填 |
 | `src/host/` | 宿主插件入口、Remote 注册与存储适配 |
 | `src/devices/` | SDK 独立进程、设备管理、偏好、语音会话与按键动作 |
 | `src/asr/` | 语音服务配置、鉴权与流式识别 |
@@ -79,6 +80,19 @@ dsh plugin --profile desktop add /绝对路径/项目目录/artifacts/实际包�
 | `scripts/`、`tests/` | 构建、开发辅助脚本与自动化测试 |
 | `docs/specs/` | [插件规格](../specs/smart-mouse-plugin.md)、[鼠标设置](../specs/mouse-settings.md)与[发布方案](../specs/ci-cd.md) |
 | `dist/`、`work/` | 正式前端构建产物与本地开发产物，不提交 |
+
+## 桌面语音浮层
+
+插件启动即在后台接入设备，设置页订阅仅观察设备状态。语音会话不经过 Harness 前端确认，也不绑定对话输入框。完全退出宿主仍会停止插件；本次不提供独立常驻服务。
+
+- macOS：`native/desktop/VoicePanel.swift` 构建不激活的 NSPanel，默认采用兼容粘贴，核对进程、窗口、文档、焦点和输入活动计数；可读取内容与选区时同时检查，不再要求辅助功能写入接口。随包提供 ARM64 应用；修改源码后在 macOS 执行 `node scripts/native/build-desktop.mjs`，需要 Xcode Command Line Tools。普通用户无需 Swift 工具链。
+- Windows：`windows.ps1` 在隐藏的 STA 进程中加载 `VoicePanel.cs`，使用系统 WinForms 与 UI Automation，无需额外下载运行时。不支持安全回填的控件显示结果供复制。此平台尚未实机验证。
+- 浮层和 Host 通过私有 stdin/stdout 交换 JSON，文字不进入命令行、临时文件或日志；macOS 默认通过临时粘贴回填，随后恢复此前的全部剪贴板类型，若期间有新复制则保留新内容。其他剪贴板写入仅来自用户点击“复制结果”。辅助功能权限不足不阻止预览，但不能自动回填。
+- 开发代际复制 `native/desktop/` 并将浮层模块的资源路径固定到对应代际。修改开发构建脚本后须重启 `npm run dev`。
+
+macOS 的 `npm test` 会编译并执行 `CompatibilityPolicy.swift` 的保护条件测试，需要 Swift 工具链。
+
+验收时分别检查：Harness 最小化/隐藏、无对话页、其他应用输入框、编辑内容/选区变化、取消、翻译失败、浮层进程异常、插件禁用、双屏及全屏。原生窗口检查使用合成文本不代表真实鼠标/实网链路通过。
 
 ## 技术配置与服务限制
 
@@ -115,7 +129,7 @@ DPI 选项及保存值见[鼠标设置](../specs/mouse-settings.md#dpi-设置)�
 
 默认内置 43 项识别选项映射，设置提供 43 项语音打字、27 项翻译源和 28 项翻译目标语言。覆盖范围、默认设置和语言编号见[鼠标设置规格](../specs/mouse-settings.md)。
 
-翻译使用源语言识别后的完整文本，调用开放平台 `POST /v1/translate/text`，读取 `data.resultText`。鉴权失效时刷新并重试一次，仍失败则 toast 提示；错误处理和时限见插件规格。实网翻译与真实设备链路仍待验收。
+翻译使用源语言识别后的完整文本，调用开放平台 `POST /v1/translate/text`，读取 `data.resultText`。鉴权失效时刷新并重试一次，仍失败则在独立浮层提示；错误处理和时限见插件规格。实网翻译与真实设备链路仍待验收。
 
 ## 验证变更
 
@@ -146,6 +160,7 @@ npm test
 | 范围 | 记录与边界 |
 | --- | --- |
 | 构建与自动化 | 曾通过构建、自动化测试、真实 Harness Gateway 与本地 Token / ASR 模拟服务集成及安装包检查；覆盖双鼠标隔离、配置切换、取消与重连、末句处理、翻译适配器、搜索编码、DPI 重试及设置界面 |
+| macOS 兼容粘贴回填（2026-11-09） | 临时文档已验证中英文及多行文字兼容粘贴，用户确认真实鼠标语音可正常回填；默认兼容粘贴已在 VS Code 输入框验证中英文和多行文字；80 项回归测试通过，其他应用和完整翻译链路仍待验收 |
 | macOS ARM64 | 曾验证 SDK 加载、初始化和退出；2026-11-05 确认退出独占 USB 接口的 ClawMouse 并重新加载后，Harness 显示 1 台 USB 鼠标、SN 和电量，未覆盖录音与按键动作 |
 | 开发重载 | 在隔离 profile 中验证 Harness 0.2.1-rc.5 HMR：同一 Host 进程替换后端并通知前端，旧 SDK 子进程退出，新 SDK 初始化；自动化覆盖编译失败保护、保存监听、恢复及退出清理，桌面窗口实际重绘尚待验收 |
 | 识别语言 | 普通话、英语、日语、粤语、法语及普通话繁体曾用合成音频抽样验证，其余映射尚未逐项实网验收 |

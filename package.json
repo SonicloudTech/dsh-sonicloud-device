@@ -19,6 +19,7 @@
     "cordis.patch.yml",
     "README.md",
     "src/devices",
+    "src/desktop",
     "native",
     "docs",
     "CHANGELOG.md",

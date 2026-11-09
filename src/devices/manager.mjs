@@ -10,8 +10,8 @@ import { translateText } from './translate.mjs';
 
 const VOICE = new Set(['voice_input', 'translate', 'speechSearch']);
 export class DeviceManager {
-  constructor({ credentials, recognize, prepare = async () => undefined, sdk = new MouseSdk(), action = systemAction, translate = translateText, config = {} }) {
-    Object.assign(this, { sdk, recognize, prepare, action, translate, config });
+  constructor({ credentials, recognize, prepare = async () => undefined, sdk = new MouseSdk(), action = systemAction, translate = translateText, desktop, config = {} }) {
+    Object.assign(this, { sdk, recognize, prepare, action, translate, desktop, config });
     this.store = new DeviceStore(credentials);
     this.devices = new Map(); this.clients = new Set(); this.pressed = new Map(); this.pending = Promise.resolve();
     this.status = '尚未连接 SDK'; this.disposed = false;
@@ -26,11 +26,16 @@ export class DeviceManager {
       this.status = message; this.cancel();
       this.devices.clear(); this.pressed.clear(); this.snapshot();
     };
+    if (desktop) {
+      desktop.onCancel = id => this.cancel(id);
+      desktop.onFault = () => this.cancel(undefined, '桌面语音浮层已断开，请重新触发');
+    }
     sdk.on('event', this.onEvent); sdk.on('fault', this.onFault);
   }
   async start() {
     if (this.started) return this.started;
     this.started = (async () => {
+      try { this.desktop?.start?.(); } catch { /* Key press reports unsupported native presentation. */ }
       try { await this.sdk.start(); this.status = this.devices.size ? '设备已连接' : '设备服务已启动，正在查找智能鼠标…'; }
       catch (error) { this.status = error.message; }
       this.snapshot();
@@ -38,8 +43,10 @@ export class DeviceManager {
     return this.started;
   }
   publish(event) {
+    this.desktop?.event(event);
+    if (this.desktop && !['devices', 'notice'].includes(event.type)) return;
     for (const queue of this.clients) {
-      try { queue.push(event); } catch { queue.end(true); this.clients.delete(queue); this.cancel(); }
+      try { queue.push(event); } catch { queue.end(true); this.clients.delete(queue); if (!this.desktop) this.cancel(); }
     }
   }
   view() {
@@ -51,8 +58,8 @@ export class DeviceManager {
   }
   snapshot() { this.publish({ type: 'devices', ...this.view() }); }
   async *watch(clientId, signal) {
-    if (this.owner) { yield { type: 'notice', message: '智能鼠标已由另一个窗口接管' }; return; }
-    const queue = new AsyncQueue(256); this.owner = clientId; this.clients.add(queue);
+    if (!this.desktop && this.owner) { yield { type: 'notice', message: '智能鼠标已由另一个窗口接管' }; return; }
+    const queue = new AsyncQueue(256); if (!this.desktop) this.owner = clientId; this.clients.add(queue);
     const abort = () => queue.end(true);
     signal.addEventListener('abort', abort, { once: true });
     try {
@@ -138,7 +145,7 @@ export class DeviceManager {
     } catch (error) { device.dpiState = 'failed'; return error.message; }
   }
   async key(device, event) {
-    if (device.type !== 'smart-mouse' || !this.owner) return;
+    if (device.type !== 'smart-mouse' || (!this.owner && !this.desktop)) return;
     if (!device.identityConfirmed) {
       if (event.action === 'down' || event.action === 'click') this.publish({ type: 'notice', message: '设备身份未确认，请重新连接鼠标' });
       return;
@@ -170,14 +177,17 @@ export class DeviceManager {
     };
     run.packets = new PcmPackets(chunk => run.queue.push(chunk));
     this.run = run;
-    run.captureTimer = setTimeout(() => this.fail(run, '界面未响应，请重新打开宿主窗口'), 5000);
+    if (!this.desktop) run.captureTimer = setTimeout(() => this.fail(run, '界面未响应，请重新打开宿主窗口'), 5000);
     run.durationTimer = setTimeout(() => this.release(run), 600000);
     try {
+      if (this.desktop) await this.desktop.begin(run);
+      if (this.run !== run || run.closing) return;
       run.service = await this.prepare();
       if (this.run !== run || run.closing) return;
       if (await this.sdk.source(device.id) !== 1) throw new Error('无法选定鼠标音频源');
       if (this.run !== run || run.closing) return;
-      this.publish({ type: 'request', sessionId: run.id, sn: run.sn, action });
+      if (this.desktop) { run.started = true; void this.process(run); }
+      else this.publish({ type: 'request', sessionId: run.id, sn: run.sn, action });
     } catch (error) { this.fail(run, error.message); }
   }
   async execute(action, value) {
@@ -234,7 +244,11 @@ export class DeviceManager {
       if (this.run !== run || run.closing) return;
       if (!complete || !run.released) throw new Error('ASR 连接中断，识别结果未完成');
       let text = formatTranscript(run.transcript.finalText(), run.preferences, run.action);
-      if (!text.trim()) throw new Error('未识别到语音');
+      if (!text.trim()) {
+        this.publish({ type: 'finished', sessionId: run.id });
+        await this.finish(run);
+        return;
+      }
       if (run.action === 'translate') {
         this.publish({ type: 'phase', sessionId: run.id, phase: 'translating' });
         text = await this.translate({ sn: run.sn, service: run.service, text, from: run.preferences.from, to: run.preferences.to, signal: run.lifetime.signal, config: this.config.translation });
@@ -244,6 +258,8 @@ export class DeviceManager {
         await this.action('openUrl', searchAddress(run.preferences.searchUrl, text));
         if (this.run !== run || run.closing) return;
         this.publish({ type: 'finished', sessionId: run.id });
+      } else if (this.desktop) {
+        await this.desktop.complete(run, text);
       } else this.publish({ type: 'result', sessionId: run.id, text });
       await this.finish(run);
     } catch (error) { this.fail(run, error.message || '语音处理失败，请重试'); }
@@ -274,6 +290,7 @@ export class DeviceManager {
     for (const queue of this.clients) queue.end(true);
     this.clients.clear(); this.owner = undefined;
     this.sdk.off('event', this.onEvent); this.sdk.off('fault', this.onFault);
+    await this.desktop?.close();
     await this.sdk.close();
   }
 }

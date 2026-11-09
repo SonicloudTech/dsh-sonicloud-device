@@ -67,7 +67,8 @@ test('built client hides shared services, edits per-device preferences, and disp
   };
   const dispose = await plugin.apply(ctx);
   const settings = registrations.get('settings.section');
-  assert.equal(settings.options.label(), '声云设备'); assert.ok(registrations.has('conversation.input.overlay'));
+  assert.equal(settings.options.label(), '声云设备'); assert.equal(registrations.has('conversation.input.overlay'), false);
+  assert.equal(dom.window.document.querySelector('.dsh-mouse-status'), null);
   const root = createRoot(dom.window.document.getElementById('root'));
   const overlay = registrations.get('shell.overlay');
   const overlayNode = dom.window.document.createElement('div'); dom.window.document.body.append(overlayNode);
@@ -159,12 +160,9 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.doesNotMatch(dom.window.document.body.textContent, /原语言选项已不再支持/);
     assert.deepEqual((await deviceStore.get('0003')).preferences, { ...defaultPreferences(), punctuation: false });
     const controller = settings.options.inject().controller;
-    await act(async () => controller.event({ type: 'failed', sessionId: 'auth-error', message: '认证失败，请稍后重试' }));
+    await act(async () => controller.event({ type: 'notice', message: '认证失败，请稍后重试' }));
     assert.equal(dom.window.document.querySelectorAll('[data-test-toast]').length, 1);
     assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /认证失败/);
-    const notice = controller.state.toast;
-    await act(async () => controller.event({ type: 'failed', sessionId: 'auth-error', message: '重复错误' }));
-    assert.equal(controller.state.toast, notice);
     await act(async () => dom.window.document.querySelector('[data-test-toast] button').click());
     assert.equal(dom.window.document.querySelector('[data-test-toast]'), null);
 

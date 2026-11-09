@@ -9,3 +9,7 @@
 `THIRD_PARTY_LICENSES.txt`、`COPYING.LGPLv2.1`、`LICENSE.hidapi-bsd` 随插件分发。不要单独复制主库而遗漏依赖；FFmpeg 保持动态链接且可替换。
 
 其他系统/架构需获取对应 SDK，并通过插件配置 `native.libraryPath` 指定主库。本文未声明这些平台已验证。
+
+## 桌面语音组件
+
+`desktop/` 是本项目维护的原生浮层及输入框回填实现，不属于上游鼠标 SDK。macOS ARM64 可执行文件由同目录 Swift 源码构建；Windows 源码由系统 PowerShell 加载。构建、权限和验证范围见[开发说明](../docs/contributing/development.md#桌面语音浮层)。
