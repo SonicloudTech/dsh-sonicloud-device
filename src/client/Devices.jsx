@@ -41,12 +41,14 @@ function DeviceForm({ device, controller, state }) {
         }} />
       </Row>
       <Row label="语音翻译" description={!state.translationReady ? '翻译服务尚未配置，暂不可用' : undefined}><Select label="翻译源语言" value={form.from} options={sourceOptions} onChange={value => change('from', value)} /><span aria-hidden="true">›</span><Select label="翻译目标语言" value={form.to} options={TRANS_TO_LANG_LIST} onChange={value => change('to', value)} /></Row>
-      <Row label="DPI 键" description={device.dpiState === 'failed' ? 'DPI 尚未应用，请重新选择后重试' : undefined}><Select label="DPI" value={form.dpi} options={DPI_LIST} onChange={value => change('dpi', value)} /></Row>
-      <Row label="M 键"><Select label="M 键动作" value={form.mAction} options={M_KEY_FUNC_LIST} onChange={value => change('mAction', value)} /></Row>
-      {form.mAction === 'speechSearch' && <Row label="搜索引擎"><Select label="搜索引擎" value={form.searchUrl} options={M_KEY_SEARCH_URL_LIST} onChange={value => change('searchUrl', value)} /></Row>}
-      {form.mAction === 'openWebUrl' && <Row label="链接地址"><Input aria-label="一键链接 URL" type="url" placeholder="https://example.com" value={form.linkUrl} onChange={event => change('linkUrl', event.target.value)} /></Row>}
-      <Row label="语音键"><Select label="语音键动作" value={form.speechAction} options={[{ value: 'voice_input', label: '语音打字' }, { value: 'translate', label: '语音翻译' }]} onChange={value => change('speechAction', value)} /></Row>
-      <Row label="AI 键"><Select label="AI 键动作" value={form.aiAction} options={[{ value: 'openAi', label: '打开 AI 对话' }]} onChange={value => change('aiAction', value)} /></Row>
+      <Row label="DPI 键" description={<>用于调节鼠标光标移动灵敏度{device.dpiState === 'failed' && <><br /><span className="dsh-asr-error">DPI 尚未应用，请重新选择后重试</span></>}</>}><Select label="DPI" value={form.dpi} options={DPI_LIST} onChange={value => change('dpi', value)} /></Row>
+      <div className="dsh-mouse-key-group">
+        <Row label="M 键" description="鼠标多功能键"><Select label="M 键动作" value={form.mAction} options={M_KEY_FUNC_LIST} onChange={value => change('mAction', value)} /></Row>
+        {form.mAction === 'speechSearch' && <div className="dsh-mouse-subrow"><div className="dsh-mouse-controls"><span className="dsh-mouse-sublabel">搜索引擎</span><Select label="搜索引擎" value={form.searchUrl} options={M_KEY_SEARCH_URL_LIST} onChange={value => change('searchUrl', value)} /></div></div>}
+        {form.mAction === 'openWebUrl' && <div className="dsh-mouse-subrow"><div className="dsh-mouse-controls"><span className="dsh-mouse-sublabel">链接地址</span><Input aria-label="一键链接 URL" type="url" placeholder="https://example.com" value={form.linkUrl} onChange={event => change('linkUrl', event.target.value)} /></div></div>}
+      </div>
+      <Row label="语音键" description="长按语音打字或翻译，松手将文字填充到已获取焦点的输入框"><Select label="语音键动作" value={form.speechAction} options={[{ value: 'voice_input', label: '语音打字' }, { value: 'translate', label: '语音翻译' }]} onChange={value => change('speechAction', value)} /></Row>
+      <Row label="AI 键" description="长按语音打字，松手自动将文字发送给 AI"><Select label="AI 键动作" value={form.aiAction} options={[{ value: 'openAi', label: '打开 AI 对话' }]} onChange={value => change('aiAction', value)} /></Row>
     </div>
     {error && <p role="alert" className="dsh-asr-error">{error}</p>}
     <div className="dsh-mouse-footer">

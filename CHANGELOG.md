@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Add usage descriptions for the DPI, M, speech, and AI keys; use small gray labels on the right for M-key sub-settings and remove the separator below the M-key selector.
 - Hide save-success and DPI command delivery notices below device settings while retaining progress and error feedback.
 - **Breaking change**: rename the package and plugin ID from `dsh-asr` to `dsh-sonicloud-device`; upgrades require removing the old plugin, installing the new package, and reapplying host plugin configuration. Device preferences retain their storage key; legacy service credentials are cleared on startup.
 - Rename the settings sidebar entry and page from “我的设备” (My Devices) to “声云设备” (Sonicloud Devices).
