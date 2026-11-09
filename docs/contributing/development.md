@@ -1,6 +1,6 @@
 # 本地开发与代码贡献
 
-本项目是 DeepSeek Harness 插件，前端和后端均由宿主加载。本文面向开发者，说明本地调试、技术配置、验证和贡献流程。普通用户的安装与使用说明见 [README](../../README.md)。以下命令在仓库根目录执行。
+本项目是 DeepSeek Harness 插件，前端和后端均由宿主加载。本文面向开发者，说明本地调试、技术配置、验证和贡献流程。普通用户的安装与使用说明见 [README](../../README.zh.md)。以下命令在仓库根目录执行。
 
 ## 环境准备
 
@@ -17,7 +17,7 @@ npm ci
 
 仅修改业务代码时无需更新依赖锁文件。增删或升级依赖使用 `npm install` / `npm uninstall`，同时提交 `package.json` 与 `package-lock.json` 的对应变更。
 
-Harness profile 自身的 pnpm 配置由宿主管理，与本仓库的 npm 开发流程独立；原生依赖安装问题见 [README](../../README.md#安装与启用)。
+Harness profile 自身的 pnpm 配置由宿主管理，与本仓库的 npm 开发流程独立；原生依赖安装问题见 [README](../../README.zh.md#安装与启用)。
 
 ## 启动开发模式
 
@@ -190,6 +190,6 @@ npm test
 | 提示已有开发构建进程 | 停止旧监听；仅在确认无开发进程且锁文件损坏时清理 `work/dev-plugin/watch.lock` |
 | 构建成功但未收到重载确认 | 检查插件是否启用、profile 与 `DSH_HOME` 是否一致，再检查宿主日志；首次使用需先安装开发链接 |
 | 同一 profile 中其他插件的 HMR 失效 | 在 profile 的用户 patch 中将各插件入口一起加入 `hmr.config.root`；用户 patch 优先级更高 |
-| SDK 初始化成功但没有鼠标 | 检查鼠标电源、连接模式与接收器占用；ClawMouse 等应用可能独占数据接口，排查方法见 [README](../../README.md#接收器已插入但没有设备) |
+| SDK 初始化成功但没有鼠标 | 检查鼠标电源、连接模式与接收器占用；ClawMouse 等应用可能独占数据接口，排查方法见 [README](../../README.zh.md#接收器已插入但没有设备) |
 
 接收器占用诊断目前仅适用于 macOS 默认 uMouse 接收器，Windows 尚未提供占用进程诊断。SDK 初始化成功不代表设备已连接；排查时分别确认 SDK 状态、设备列表与实际按键、音频事件。

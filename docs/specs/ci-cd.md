@@ -32,9 +32,9 @@ GitHub 仓库：[SonicloudTech/dsh-sonicloud-device](https://github.com/Soniclou
 - 每次打包生成 `.tgz`、校验文件和发布信息（版本、提交 SHA、工作流地址）；包名与文件名从打包结果读取，不硬编码。
 - 测试产物上传 Actions Artifact，保留 30 天；运行摘要提供下载地址及有效期。下载后解压外层归档获得 `.tgz`。下载需要登录 GitHub；公开仓库的 Artifact 不作为内部保密分发渠道。[下载规则](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/download-workflow-artifacts)
 - 正式产物与发布信息先存入 Artifact，保留 30 天供重跑核对；再发布已经检查的同一份 `.tgz`，指定 `--access public --tag latest`。发布后等待 npm 异步处理（最多 3 分钟），查询并下载 npm 产物，确认版本、`latest`、SRI 和 SHA-256 一致；运行摘要提供 npm 版本页面和该版本 `dist.tarball` 下载地址。
-- CI 通过仅代表自动化验证通过；推送到 `main` 前完成 [README 使用流程](../../README.md) 中与本次变更相关的实机验证。
+- CI 通过仅代表自动化验证通过；推送到 `main` 前完成 [README 使用流程](../../README.zh.md) 中与本次变更相关的实机验证。
 
-测试包与正式包的安装、更新和旧包迁移见 [README](../../README.md#安装与启用)。
+测试包与正式包的安装、更新和旧包迁移见 [README](../../README.zh.md#安装与启用)。
 
 ## 4. 权限与首次配置
 

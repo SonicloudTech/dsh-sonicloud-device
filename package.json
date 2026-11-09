@@ -18,6 +18,7 @@
     "dist",
     "cordis.patch.yml",
     "README.md",
+    "README.zh.md",
     "src/devices",
     "src/desktop",
     "native",

@@ -1,140 +1,142 @@
-# 声云智能鼠标插件
+# Sonicloud Smart Mouse Plugin
 
-使用声云智能鼠标在桌面应用中进行语音输入、翻译和搜索，并通过 DeepSeek Harness 管理鼠标按键和灵敏度。安装后，可在 Harness 设置中的“声云设备”查看和配置鼠标。
+English | [简体中文](README.zh.md)
 
-## 你可以做什么
+Use a Sonicloud smart mouse for voice typing, translation, and search in desktop apps, and manage its buttons and sensitivity through DeepSeek Harness. After installation, open **Sonicloud Devices (声云设备)** in Harness settings to view and configure your mice.
 
-- **语音打字**：按住鼠标语音键说话，松开后将识别文字填入按键时聚焦的可编辑输入框，不自动发送。
-- **语音翻译**：设置源语言和目标语言，将语音键或 M 键设为语音翻译，松开后回填译文。
-- **语音搜索**：将 M 键设为语音搜索，说出关键词后使用所选搜索引擎搜索。
-- **自定义按键**：为 M 键选择回车、后退、一键链接等动作；长按 AI 键可唤起 Harness 并向 AI 对话输入框填入语音文字，默认自动发送，可在设备设置关闭。
-- **管理多台鼠标**：查看连接方式、电量和设备序列号，分别保存每台鼠标的语言、按键和灵敏度设置。
+## Features
 
-插件根据当前鼠标身份自动接入服务，无需手填鉴权配置。
+- **Voice typing**: Hold the mouse's voice button to speak. Release it to insert recognized text into the editable field that was focused when you pressed the button, without sending it automatically.
+- **Voice translation**: Choose source and target languages, assign voice translation to the voice or M button, and release the button to insert the translation.
+- **Voice search**: Assign voice search to the M button, then speak your query to search with your selected engine.
+- **Custom buttons**: Assign Enter, Backspace, Open Link, or other actions to the M button. Hold the AI button to bring Harness to the foreground and dictate into an AI conversation. Auto-send is enabled by default and can be disabled in device settings.
+- **Multiple mice**: View connection type, battery level, and serial number, and save language, button, and sensitivity settings separately for each mouse.
 
-## 使用前准备
+The plugin connects to services using the current mouse's identity. No manual authentication configuration is required.
 
-- DeepSeek Harness **0.2.1-rc.5 或更高版本**。
-- 支持本插件的声云智能鼠标，通过蓝牙或 2.4G USB 接收器连接。
-- 插件安装包（`.tgz` 文件），以及可访问语音服务的网络。
+## Requirements
 
-安装包包含 Apple 芯片 Mac 和 Windows x64 所需的设备组件。维护者已确认完成 0.1.0 的实机验收；其他系统暂不保证可用。
+- DeepSeek Harness **0.2.1-rc.5 or later**.
+- A supported Sonicloud smart mouse connected via Bluetooth or a 2.4 GHz USB receiver.
+- The plugin package (`.tgz`) and network access to the speech service.
 
-## 安装与启用
+The package includes device components for Apple silicon Macs and Windows x64. The maintainer has confirmed hardware acceptance testing for version 0.1.0; other systems are not currently guaranteed to work.
 
-1. 启动一次 Harness，完成初始化，然后完全退出应用。
-2. 在终端执行以下命令，将路径替换为你取得的安装包的完整路径：
+## Installation and activation
 
-   ```sh
-   dsh plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.1.tgz"
-   ```
-
-   文件名以实际安装包为准。Mac 如果提示找不到 `dsh`，可使用：
+1. Launch Harness once to complete initialization, then quit the app completely.
+2. Run the following command in a terminal, replacing the path with the full path to your package:
 
    ```sh
-   "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.1.tgz"
+   dsh plugin --profile desktop add "/absolute/path/sonicloud-dsh-sonicloud-device-0.1.1.tgz"
    ```
 
-3. 重新启动 Harness，在插件管理中启用 `dsh-sonicloud-device`。
-4. 打开设置，进入侧栏的“声云设备”。
+   Use the actual package filename. On a Mac, if `dsh` cannot be found, use:
 
-正式版也可按确切版本从 npm 安装：
+   ```sh
+   "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "/absolute/path/sonicloud-dsh-sonicloud-device-0.1.1.tgz"
+   ```
+
+3. Restart Harness and enable `dsh-sonicloud-device` in the plugin manager.
+4. Open Settings and select **Sonicloud Devices (声云设备)** in the sidebar.
+
+You can also install a specific release from npm:
 
 ```sh
 dsh plugin --profile desktop add @sonicloud/dsh-sonicloud-device@0.1.1
 ```
 
-若安装提示 `ERR_PNPM_IGNORED_BUILDS` 且指向 `koffi`，在该 profile 的 `pnpm-workspace.yaml` 中补充以下配置，替换为报错中的确切版本后重试；保留已有配置，仅批准这一原生依赖：
+If installation reports `ERR_PNPM_IGNORED_BUILDS` for `koffi`, add the following to that profile's `pnpm-workspace.yaml`, replacing the placeholder with the exact version in the error, then retry. Preserve existing configuration and approve only this native dependency:
 
 ```yaml
 allowBuilds:
-  "koffi@<报错中的版本>": true
+  "koffi@<version-from-error>": true
 ```
 
-从旧包迁移时，完全退出 Harness，先运行 `dsh plugin --profile desktop remove dsh-sonicloud-device`，再安装新包。插件实例 ID 仍为 `dsh-sonicloud-device`，按 SN 保存的设备偏好继续使用原存储键；不要删除 profile 数据。
+To migrate from the old package, quit Harness completely, run `dsh plugin --profile desktop remove dsh-sonicloud-device`, then install the new package. The plugin instance ID remains `dsh-sonicloud-device`, and device preferences keyed by serial number keep their existing storage keys. Do not delete profile data.
 
-测试包从 [Actions](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/workflows/release.yml) 的运行摘要下载，保留 30 天；下载需要登录 GitHub，解压外层归档后安装其中的 `.tgz`。
+Download test packages from the run summary in [Actions](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/workflows/release.yml). They are retained for 30 days and require a GitHub login to download. Extract the outer archive, then install the `.tgz` inside.
 
-## 开始使用
+## Getting started
 
-### 连接与设置鼠标
+### Connect and configure a mouse
 
-打开鼠标电源，选择蓝牙或 2.4G 模式并完成连接。在“声云设备”中选中鼠标，即可查看电量、连接方式和序列号（SN）。
+Turn on your mouse, select Bluetooth or 2.4 GHz mode, and connect it. Select the mouse in **Sonicloud Devices (声云设备)** to view its battery level, connection type, and serial number (SN).
 
-你可以调整语音识别语言、是否保留标点、鼠标灵敏度（DPI）以及按键动作。更改后自动保存，无需点击保存按钮。“恢复默认”只重置当前鼠标；重新连接同一台鼠标时会恢复已保存的设置。
+You can change the recognition language, punctuation setting, mouse sensitivity (DPI), and button actions. Changes save automatically; there is no Save button. **Restore Defaults (恢复默认)** resets only the current mouse. Reconnecting the same mouse restores its saved settings.
 
-### 语音输入
+### Voice typing
 
-1. 在“声云设备”中，将“语音键”设为“语音打字”，选择识别语言。
-2. 在目标应用的可编辑输入框中放置光标；不必打开 Harness 对话。
-3. 按住鼠标语音键说话，松开后等待识别完成。
-4. 检查输入框中的文字，再自行发送。
+1. In **Sonicloud Devices (声云设备)**, set **Voice Button (语音键)** to **Voice Typing (语音打字)** and choose a recognition language.
+2. Place the cursor in an editable field in the target app. You do not need to open a Harness conversation.
+3. Hold the mouse's voice button to speak, then release it and wait for recognition to finish.
+4. Review the inserted text and send it yourself.
 
-录音来自鼠标。识别中间文字、整理和翻译状态显示在鼠标所在屏幕底部居中的独立浮层，不抢占输入焦点。Harness 主窗口最小化、隐藏或切换页面不会取消会话；插件后台仍须运行，完全退出 Harness 后不可用。
+Audio comes from the mouse. Interim text, finishing status, and translation status appear in a separate overlay centered at the bottom of the screen containing the mouse pointer, without taking input focus. Minimizing or hiding the Harness window, or switching pages, does not cancel the session. The plugin must remain running in the background; quitting Harness completely stops it.
 
-点击浮层叉号按钮或断开鼠标可取消会话。输入目标、内容或选区发生变化，或应用不支持安全回填时，浮层保留结果供复制。macOS 自动回填需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 Sonicloud Voice；没有权限仍可识别并复制结果。Windows 对不提供可编辑 UI Automation 文本接口的输入框保留结果供复制。
+Click the overlay's close button or disconnect the mouse to cancel. If the target, content, or selection changes, or the app does not support safe text insertion, the overlay keeps the result available to copy. On macOS, automatic insertion requires allowing **Sonicloud Voice** under **System Settings → Privacy & Security → Accessibility**. Recognition and copying still work without this permission. On Windows, results remain available to copy when an input field does not expose an editable UI Automation text interface.
 
-macOS 默认使用兼容粘贴回填，支持 Zed 等未提供辅助功能写入接口的应用。录音期间保持目标窗口和文档，不进行键盘编辑、鼠标点击或滚动；可读取内容与选区时也会检查是否变化。回填临时使用剪贴板并恢复原内容，不覆盖期间的新复制内容；检测到目标或输入活动变化时保留结果供复制。
+macOS uses a compatibility paste method by default, supporting apps such as Zed that do not expose an accessibility write interface. Keep the target window and document unchanged during recording, and avoid typing, clicking, or scrolling. Where readable, content and selection are also checked for changes. Insertion temporarily uses the clipboard and restores its previous contents without overwriting anything newly copied in the meantime. If the target or input activity changes, the result remains available to copy.
 
-### 按键与搜索
+### Buttons and search
 
-| 按键 | 使用方式 |
+| Button | Behavior |
 | --- | --- |
-| 语音键 | 选择语音打字或语音翻译，按住说话、松开结束 |
-| M 键 | 可选回车、后退、语音打字、语音翻译、语音搜索、一键链接等动作；语音动作按住说话，其他动作在松键时执行 |
-| AI 键 | 长按说话、松开结束；Harness 不在前台时自动唤起，在 AI 对话页时填充当前对话，否则新建对话并填充；无需输入框焦点；“自动发送”默认开启，关闭时仅填充 |
+| Voice | Choose voice typing or translation; hold to speak and release to finish |
+| M | Choose Enter, Backspace, voice typing, translation, voice search, or Open Link; hold for voice actions, while other actions run on release |
+| AI | Hold to speak and release to finish; brings Harness to the foreground if needed, fills the current AI conversation or creates one when on another page; input focus is not required; Auto-send is enabled by default, or disable it to fill the draft only |
 
-AI 键仅作用于 DeepSeek Harness，沿用当前鼠标的识别语言与标点配置。识别结果追加到已有草稿末尾；“自动发送”开启时提交完整草稿及附件，关闭时保留供手动发送。开关按设备保存，录音使用按下时的设置；录音期间切换页面或对话，完成后仍回到本次目标对话并填充。唤起、创建或填充失败时，浮层保留结果供复制。宿主和插件须已运行，完全退出后不可用。
+The AI button works only with DeepSeek Harness and uses the current mouse's recognition language and punctuation settings. Recognized text is appended to the existing draft. With **Auto-send (自动发送)** enabled, the complete draft and attachments are submitted; otherwise, they remain for manual sending. This setting is saved per device, and each recording uses the setting captured when the button was pressed. If you switch pages or conversations during recording, the plugin returns to the captured conversation and fills it when recognition finishes. If activation, conversation creation, or insertion fails, the overlay keeps the result available to copy. Harness and the plugin must already be running; this feature is unavailable after quitting completely.
 
-使用语音搜索时，在设置中选择百度、Bing 或 Google。使用一键链接时，先填写网址并点击“确认”；`https://` 或 `http://` 可省略，保存和打开时保留原地址。搜索和打开链接无需先选中对话输入框。
+For voice search, choose Baidu, Bing, or Google in settings. For **Open Link (一键链接)**, enter a URL and click **Confirm (确认)**. You may omit `https://` or `http://`; the address is preserved as entered when saved and opened. Searching and opening links do not require a focused conversation input field.
 
-多台鼠标可同时连接、分别设置，但同一时间只能进行一次语音操作。
+Multiple mice can be connected and configured separately, but only one voice operation can run at a time.
 
-## 常见问题
+## Troubleshooting
 
-### 接收器已插入但没有设备
+### Receiver connected but no device appears
 
-先确认鼠标已开机、切到 2.4G 模式并已唤醒。如果正在运行 ClawMouse 等鼠标管理软件，请完全退出后再试，它们可能占用连接。普通光标能够移动，并不代表语音功能已经连接成功。
+Make sure the mouse is powered on, in 2.4 GHz mode, and awake. Quit other mouse management apps, such as ClawMouse, which may hold the connection. Normal cursor movement does not mean the voice connection is working.
 
-Mac 上请留意“声云设备”中的占用提示。若显示“已检测到 2.4G 接收器，正在等待鼠标响应”，请再次检查鼠标的电源和连接模式。
+On a Mac, check **Sonicloud Devices (声云设备)** for connection ownership warnings. If it reports that a 2.4 GHz receiver was detected and is waiting for the mouse to respond, check the mouse's power and connection mode again.
 
-### 语音或翻译失败
+### Voice recognition or translation fails
 
-先确认鼠标身份已识别、网络可用，翻译源语言和目标语言不同。鉴权失效会自动重试一次，仍失败时弹出提示；翻译失败可复制识别原文。
+Make sure the mouse's identity has been recognized, the network is available, and the translation source and target languages differ. Authentication failures trigger one automatic retry; a message appears if it still fails. If translation fails, you can copy the recognized source text.
 
-### 设置或按键没有生效
+### Settings or buttons do not take effect
 
-- DPI 提示应用失败时，重新选择后重试。
-- Mac 上的回车、后退等系统按键动作可能需要为 Harness 授予辅助功能权限。
-- 如果提示原语言选项已不再支持，请重新选择语言。
+- If applying DPI fails, select the value again to retry.
+- On a Mac, system key actions such as Enter and Backspace may require Accessibility permission for Harness.
+- If a saved language is no longer supported, select a supported language again.
 
-### 如何更新或卸载
+### Update or uninstall
 
-更新时，完全退出 Harness，用安装命令安装新版本的 `.tgz` 文件，再重新启动。
+To update, quit Harness completely, install the new `.tgz` using the installation command, and restart Harness.
 
-卸载时，完全退出 Harness 后执行：
+To uninstall, quit Harness completely and run:
 
 ```sh
 dsh plugin --profile desktop remove @sonicloud/dsh-sonicloud-device
 ```
 
-Mac 如果找不到 `dsh`，使用安装步骤中的完整命令路径。
+On a Mac, if `dsh` cannot be found, use the full CLI path shown in the installation steps.
 
-## 联系方式
+## Contact
 
-如需商务合作、技术支持或购买鼠标硬件，欢迎通过以下方式联系我们：
+For business partnerships, technical support, or mouse hardware purchases:
 
-- 邮箱：[xu_heng_yu@sinicloud.com](mailto:xu_heng_yu@sinicloud.com)
-- 微信：扫描下方二维码联系。
+- Email: [xu_heng_yu@sinicloud.com](mailto:xu_heng_yu@sinicloud.com)
+- WeChat: Scan the QR code below.
 
-<img src="src/client/assets/contact-wechat.jpg" alt="商务合作、技术支持与鼠标硬件购买微信联系二维码" width="300" />
+<img src="src/client/assets/contact-wechat.jpg" alt="WeChat contact QR code for business partnerships, technical support, and mouse hardware purchases" width="300" />
 
-## 参与贡献
+## Contributing
 
-想修改插件或贡献代码，请阅读[本地开发与代码贡献指南](docs/contributing/development.md)，了解环境准备、调试、测试和提交流程。
+Read the [local development and contribution guide](docs/contributing/development.md) (in Chinese) for environment setup, debugging, testing, and contribution instructions.
 
-版本变更见[更新日志](CHANGELOG.zh.md)。
+See the [changelog](CHANGELOG.md) for release notes.
 
-## 许可
+## License
 
-项目代码使用 [MIT 许可](LICENSE)。随包原生 SDK 和第三方库保留各自许可，见 [组件声明](native/THIRD_PARTY_LICENSES.txt)。
+Project code is licensed under the [MIT License](LICENSE). Bundled native SDKs and third-party libraries retain their own licenses; see the [component notices](native/THIRD_PARTY_LICENSES.txt).
