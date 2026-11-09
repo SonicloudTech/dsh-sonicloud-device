@@ -26,13 +26,13 @@
 2. 在终端执行以下命令，将路径替换为你取得的安装包的完整路径：
 
    ```sh
-   dsh plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.0.tgz"
+   dsh plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.1.tgz"
    ```
 
    文件名以实际安装包为准。Mac 如果提示找不到 `dsh`，可使用：
 
    ```sh
-   "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.0.tgz"
+   "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop add "/绝对路径/sonicloud-dsh-sonicloud-device-0.1.1.tgz"
    ```
 
 3. 重新启动 Harness，在插件管理中启用 `dsh-sonicloud-device`。
@@ -41,10 +41,15 @@
 正式版也可按确切版本从 npm 安装：
 
 ```sh
-dsh plugin --profile desktop add @sonicloud/dsh-sonicloud-device@0.1.0
+dsh plugin --profile desktop add @sonicloud/dsh-sonicloud-device@0.1.1
 ```
 
-若安装提示 `ERR_PNPM_IGNORED_BUILDS` 且指向 `koffi`，按提示在该 profile 的 `pnpm-workspace.yaml` 中为报告的确切 `koffi@版本` 配置 `allowBuilds: true` 后重试；仅批准这一原生依赖。
+若安装提示 `ERR_PNPM_IGNORED_BUILDS` 且指向 `koffi`，在该 profile 的 `pnpm-workspace.yaml` 中补充以下配置，替换为报错中的确切版本后重试；保留已有配置，仅批准这一原生依赖：
+
+```yaml
+allowBuilds:
+  "koffi@<报错中的版本>": true
+```
 
 从旧包迁移时，完全退出 Harness，先运行 `dsh plugin --profile desktop remove dsh-sonicloud-device`，再安装新包。插件实例 ID 仍为 `dsh-sonicloud-device`，按 SN 保存的设备偏好继续使用原存储键；不要删除 profile 数据。
 

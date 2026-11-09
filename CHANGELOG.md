@@ -2,14 +2,15 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-09
+
 ### Added
 
-- Add GitHub Actions builds for dev test packages and main releases, with bilingual changelog, package content and integrity checks, and release retry support.
+- Enable GitHub Actions: dev pushes build test packages and main pushes publish releases through npm Trusted Publisher, with bilingual changelog and package checks, run summaries, and release recovery.
 
-### Changed
+### Fixed
 
-- **Breaking change:** Rename the npm package to `@sonicloud/dsh-sonicloud-device`; remove the old package before installing the new one. Preserve the plugin instance ID and device configuration storage keys.
-- License project code under MIT; bundled native components retain their own licenses.
+- Wait for npm processing before checking the version and download, avoiding premature failures after a successful upload.
 
 ## 0.1.0 - 2026-11-09
 
@@ -27,3 +28,8 @@ Initial release of the Sonicloud smart mouse plugin for DeepSeek Harness 0.2.1-r
 - Insert text into desktop application inputs after checking the target and input state, retaining results for copying when safe insertion is unavailable; use compatibility paste on macOS while protecting and restoring clipboard contents.
 - Obtain voice and translation service credentials automatically using the originating device SN, refreshing and retrying once on authentication failure without manual credential setup; handle device disconnections, reconnect event streams, and report macOS USB interface contention.
 - Provide local development and automatic reload commands, development and feature specifications, and tests for device isolation, settings UI, voice flows, and host Gateway integration.
+
+### Changed
+
+- **Breaking change:** Compared with the old local package, rename the npm package to `@sonicloud/dsh-sonicloud-device`; preserve the plugin instance ID and device configuration storage keys.
+- License project code under MIT; bundled native components retain their own licenses.

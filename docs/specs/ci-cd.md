@@ -31,7 +31,7 @@ GitHub 仓库：[SonicloudTech/dsh-sonicloud-device](https://github.com/Soniclou
 - 包内必须包含 `dist/client.js`、宿主源码、`cordis.patch.yml`、平台原生库及许可证；不得包含开发链接产物、测试凭据或发布密钥。包名迁移后验证 patch 引用和安装入口。
 - 每次打包生成 `.tgz`、校验文件和发布信息（版本、提交 SHA、工作流地址）；包名与文件名从打包结果读取，不硬编码。
 - 测试产物上传 Actions Artifact，保留 30 天；运行摘要提供下载地址及有效期。下载后解压外层归档获得 `.tgz`。下载需要登录 GitHub；公开仓库的 Artifact 不作为内部保密分发渠道。[下载规则](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/download-workflow-artifacts)
-- 正式产物与发布信息先存入 Artifact，保留 30 天供重跑核对；再发布已经检查的同一份 `.tgz`，指定 `--access public --tag latest`。发布后查询 npm，确认版本、`latest` 和包完整性一致；运行摘要提供 npm 版本页面和该版本 `dist.tarball` 下载地址。
+- 正式产物与发布信息先存入 Artifact，保留 30 天供重跑核对；再发布已经检查的同一份 `.tgz`，指定 `--access public --tag latest`。发布后等待 npm 异步处理（最多 3 分钟），查询并下载 npm 产物，确认版本、`latest`、SRI 和 SHA-256 一致；运行摘要提供 npm 版本页面和该版本 `dist.tarball` 下载地址。
 - CI 通过仅代表自动化验证通过；推送到 `main` 前完成 [README 使用流程](../../README.md) 中与本次变更相关的实机验证。
 
 安装前完全退出 Harness，安装后重新启动并启用插件：
@@ -113,14 +113,16 @@ npm publish /绝对路径/已检查的正式包.tgz --access public --tag latest
 - 同一次运行重试时，恢复该运行保存的正式 Artifact 并重新执行测试，不重新打包；记录必须匹配仓库、提交 SHA、运行 ID、包名、版本和哈希。若 npm 已存在该版本，再核对 npm 完整性与 `latest`；一致则补全摘要，不一致、产物过期或记录缺失则失败。
 - 已发布问题版本通过新修复版本替代，不自动删除或覆盖现有 npm 版本。
 
-## 6. 验收与待配置
+## 6. 验收与平台状态
 
 验收：仅 `push dev/main` 触发；`dev` 产出可安装测试包；`main` 发布 npm 正式版；运行摘要中的版本、日志和产物对应；失败及重跑不误报、不重复发布；首次迁移保留既有配置。
 
 已实现：包名及客户端/RPC 模块标识迁移、仓库元数据、MIT 许可、工作流、双语日志及安装包校验、发布恢复与摘要。插件实例 ID 和设备配置存储键保留。
 
-已验证：本地 123 项测试通过；实际正式包内容检查通过；隔离 Harness profile 迁移检查通过；actionlint 工作流检查通过。维护者已确认 0.1.0 实机验收。
+已验证：本地完整测试通过（新增发布等待测试后共 124 项）；实际正式包内容检查通过；隔离 Harness profile 迁移检查通过；actionlint 工作流检查通过。维护者已确认 0.1.0 实机验收。
 
 平台已确认：GitHub 仓库公开；`npm-production` 仅允许 `main` 分支、无人工审批；npm 账号 `bingmax` 是 `sonicloud` Owner 且已启用 2FA。
 
-待完成：GitHub Actions 实际运行、首次 npm 发布、包级 Trusted Publisher 及首次 OIDC 发布验证。
+已验证：`dev` 实际运行通过，测试产物已上传且 npm 发布 job 跳过；`0.1.0` 已由维护者身份发布，已核对 registry 版本、`latest`、SRI 和下载 SHA-256。
+
+包级 Trusted Publisher 已按第 4.4 节保存。`0.1.1` 使用该配置执行首次 OIDC 发布；发布及同次运行重跑的验证结果以 [Actions 运行摘要](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/workflows/release.yml) 为准。
