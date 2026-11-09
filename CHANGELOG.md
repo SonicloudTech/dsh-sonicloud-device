@@ -19,6 +19,8 @@
 
 ### Changed
 
+- Remove the shadow from the mouse illustration on the Sonicloud Devices page.
+
 - Update the AI-key description to state that holding records speech and releasing fills the AI conversation input; remove the “Open AI conversation” dropdown.
 
 - Dismiss the status pill immediately when recognition completes without speech, instead of leaving a no-speech notice visible.

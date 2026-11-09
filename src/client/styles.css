@@ -26,7 +26,7 @@
 .dsh-mouse-carousel { display:flex; align-items:center; justify-content:center; gap:80px; padding:40px 20px 0; }
 .dsh-mouse-carousel > button { border:0; background:none; font-size:36px; color:var(--dsw-alias-label-tertiary,#858890); cursor:pointer; }
 .dsh-mouse-product { text-align:center; }
-.dsh-mouse-illustration { position:relative; width:105px; height:150px; margin:0 auto; border:1px solid #aeb5c0; border-radius:48% 48% 45% 45%; background:linear-gradient(125deg,#fbfcfd,#d0d4da); box-shadow:-14px 14px 0 #b9bec7,0 23px 0 -10px #e7e8eb; }
+.dsh-mouse-illustration { position:relative; width:105px; height:150px; margin:0 auto; border:1px solid #aeb5c0; border-radius:48% 48% 45% 45%; background:linear-gradient(125deg,#fbfcfd,#d0d4da); }
 .dsh-mouse-illustration:before { content:''; position:absolute; width:1px; height:65px; left:50%; top:0; background:#b1b7c0; }
 .dsh-mouse-wheel { position:absolute; width:10px; height:29px; left:calc(50% - 5px); top:18px; border-radius:8px; background:repeating-linear-gradient(#9ba3b0 0 3px,#cbd0d7 4px 6px); border:1px solid #939aa7; }
 .dsh-mouse-ai { position:absolute; bottom:22px; left:0; width:100%; font-size:9px; letter-spacing:2px; color:#8d949f; }
