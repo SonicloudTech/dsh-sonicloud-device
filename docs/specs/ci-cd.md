@@ -111,6 +111,7 @@ npm publish /绝对路径/已检查的正式包.tgz --access public --tag latest
 - 测试、构建或包检查失败：停止上传和发布，在 Actions 运行摘要中记录失败阶段，仅展示实际可用的产物链接。
 - 正式发布串行执行，不取消正在进行的发布；新发布不得使 `latest` 回退。发布前再次核对 npm 版本状态，重复版本不覆盖。
 - 同一次运行重试时，恢复该运行保存的正式 Artifact 并重新执行测试，不重新打包；记录必须匹配仓库、提交 SHA、运行 ID、包名、版本和哈希。若 npm 已存在该版本，再核对 npm 完整性与 `latest`；一致则补全摘要，不一致、产物过期或记录缺失则失败。
+- 重跑前确认原 Artifact 仍可下载；仅发布 job 失败时优先重跑失败 job，保留构建结果。若原 Artifact 已不可用，不用新打包结果冒充原产物，也不重新发布已存在版本；核查首次发布结果后，后续改动使用新版本。
 - 已发布问题版本通过新修复版本替代，不自动删除或覆盖现有 npm 版本。
 
 ## 6. 验收与平台状态
@@ -123,6 +124,8 @@ npm publish /绝对路径/已检查的正式包.tgz --access public --tag latest
 
 平台已确认：GitHub 仓库公开；`npm-production` 仅允许 `main` 分支、无人工审批；npm 账号 `bingmax` 是 `sonicloud` Owner 且已启用 2FA。
 
-已验证：`dev` 实际运行通过，测试产物已上传且 npm 发布 job 跳过；`0.1.0` 已由维护者身份发布，已核对 registry 版本、`latest`、SRI 和下载 SHA-256。
+已验证：[`dev` 实际运行](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/42594309932)通过，测试产物已上传且 npm 发布 job 跳过；`0.1.0` 已由维护者身份发布，已核对 registry 版本、`latest`、SRI 和下载 SHA-256。首次发布使用的临时 npm 登录已撤销，凭据文件已删除。
 
-包级 Trusted Publisher 已按第 4.4 节保存。`0.1.1` 使用该配置执行首次 OIDC 发布；发布及同次运行重跑的验证结果以 [Actions 运行摘要](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/workflows/release.yml) 为准。
+包级 Trusted Publisher 已按第 4.4 节保存，npm 状态为 `Valid`。[`0.1.1` 首次 OIDC 发布](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/42595306280/attempts/1)通过，npm `latest` 为 `0.1.1`；下载包的 SRI 与 SHA-256 校验通过，provenance 中的仓库、`main` 分支、工作流和提交与本次运行一致。
+
+重跑结果：[`0.1.1` 第 2 次尝试](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/42595306280/attempts/2)在 preflight 安全停止，未重新打包或重复发布。完整重跑后原 Artifact 列表为空，原 Artifact ID 查询返回 404；本次无法恢复原产物，具体消失原因未确定。首次发布与 npm 版本不受影响，但 Actions 最新尝试显示失败。已验证产物缺失时的保护行为；原 Artifact 可用时的成功恢复分支已通过本地测试，尚未完成平台验收。

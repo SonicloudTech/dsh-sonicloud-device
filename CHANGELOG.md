@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Document CI/CD platform configuration and release verification results with traceable workflow links.
+
 ## 0.1.1 - 2026-11-09
 
 ### Added
