@@ -173,6 +173,19 @@ export async function verifyRegistry(record, metadata, fetchImpl = fetch) {
   return url.href;
 }
 
+export async function awaitPublication(record, { readMetadata = registryMetadata, verify = verifyRegistry,
+  pause = delay, attempts = 37 } = {}) {
+  // npm 接受上传后可能异步处理数分钟；只有版本和标签可见后才核对实际 tarball。
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const metadata = await readMetadata();
+    if (metadata?.versions?.[record.version] && metadata['dist-tags']?.latest === record.version) {
+      return verify(record, metadata);
+    }
+    if (attempt + 1 < attempts) await pause(5000);
+  }
+  throw new Error('npm 已接受发布，但在 3 分钟内未确认版本和 latest；请重跑以核对原产物，不要重复手动发布。');
+}
+
 async function publish() {
   const ctx = context();
   assert.equal(ctx.branch, 'main', '仅 main 可发布 npm');
@@ -185,11 +198,7 @@ async function publish() {
       '--access', 'public', '--tag', 'latest', `--registry=${REGISTRY}/`], { maxBuffer: 4 * 1024 * 1024, timeout: 180000 });
     console.log(stdout.trim());
   }
-  let tarball;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try { tarball = await verifyRegistry(record, await registryMetadata()); break; }
-    catch (error) { if (attempt === 4) throw error; await delay(3000); }
-  }
+  const tarball = await awaitPublication(record);
   await mkdir('work', { recursive: true });
   await writeJson('work/published.json', { version: record.version, name: record.name, tarball,
     page: `https://www.npmjs.com/package/${record.name}/v/${record.version}`, recovered: decision === 'verify' });

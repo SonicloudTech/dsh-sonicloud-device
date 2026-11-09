@@ -8,7 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { PACKAGE, REPOSITORY, compareVersions, developmentVersion, escapeHtml, publicationDecision,
   releaseNotes, requiredFiles, validateFileList, validateManifest, validateText } from '../scripts/ci/policy.mjs';
-import { context, inspectTarball, registryMetadata, verifyBundle, verifyRegistry } from '../scripts/ci/release.mjs';
+import { awaitPublication, context, inspectTarball, registryMetadata, verifyBundle, verifyRegistry } from '../scripts/ci/release.mjs';
 
 const run = promisify(execFile);
 const ctx = { repository: REPOSITORY, sha: 'a'.repeat(40), runId: '123', attempt: '2' };
@@ -126,6 +126,23 @@ test('发布后同时核对 latest、SRI 和下载内容，不能只相信 regis
   await assert.rejects(verifyRegistry({ ...saved, sha256: 'bad' }, data, fetchImpl), /SHA-256/);
   data['dist-tags'].latest = '0.2.0';
   await assert.rejects(verifyRegistry(saved, data, fetchImpl), /latest/);
+});
+
+test('等待 npm 异步处理，但完整性错误立即失败且不会重复发布', async () => {
+  const reads = [null, { ...metadata(), 'dist-tags': { latest: '0.0.9' } }, metadata()];
+  let pauses = 0, verifications = 0;
+  assert.equal(await awaitPublication(record, {
+    readMetadata: async () => reads.shift(), pause: async () => { pauses++; },
+    verify: async () => { verifications++; return 'verified'; }, attempts: 3,
+  }), 'verified');
+  assert.equal(pauses, 2); assert.equal(verifications, 1);
+  await assert.rejects(awaitPublication(record, {
+    readMetadata: async () => null, pause: async () => {}, attempts: 2,
+  }), /未确认版本/);
+  await assert.rejects(awaitPublication(record, {
+    readMetadata: async () => metadata(), verify: async () => { throw new Error('integrity mismatch'); },
+    pause: async () => assert.fail('完整性错误不应等待重试'),
+  }), /integrity mismatch/);
 });
 
 test('init 在独立工作副本生成测试版本，保持源码日志不变', async t => {
