@@ -1,0 +1,16 @@
+{
+  "version": "0.4.20",
+  "repository": "https://github.com/SonicloudTech/mouse-sdk",
+  "assets": [
+    {
+      "name": "uMouseSdk_0.4.20_macOS_11_arm64.zip",
+      "url": "https://github.com/SonicloudTech/mouse-sdk/releases/download/v0.4.20/uMouseSdk_0.4.20_macOS_11_arm64.zip",
+      "sha256": "4df317706bd29bd54e766d68f2ca92b9ec95131e319e0d6b3b4d547e25fd02bc"
+    },
+    {
+      "name": "uMouseSdk_0.4.20_Windows_10-11_x64.zip",
+      "url": "https://github.com/SonicloudTech/mouse-sdk/releases/download/v0.4.20/uMouseSdk_0.4.20_Windows_10-11_x64.zip",
+      "sha256": "ba4d07449f5d3bea2368fc176c8dbb99e0f99dddb284e791bd894ae7533913f1"
+    }
+  ]
+}

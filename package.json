@@ -1,0 +1,66 @@
+{
+  "name": "dsh-sonicloud-device",
+  "version": "0.2.1",
+  "description": "DeepSeek Harness 智能鼠标、多设备设置与共享语音服务",
+  "icon": "./src/client/assets/sonicloud.png",
+  "type": "module",
+  "main": "src/host/index.mjs",
+  "exports": {
+    ".": "./src/host/index.mjs",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/asr",
+    "src/host",
+    "src/shared",
+    "src/client/assets",
+    "dist",
+    "cordis.patch.yml",
+    "README.md",
+    "src/devices",
+    "native",
+    "docs",
+    "CHANGELOG.md",
+    "CHANGELOG.zh.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:setup": "node scripts/dev/setup.mjs",
+    "pretest": "npm run build",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm test",
+    "probe": "node scripts/probe.mjs",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.5"
+  },
+  "dependencies": {
+    "koffi": "^2.15.2",
+    "ws": "^8.18.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-api-gateway": "^0.2.1-rc.5",
+    "@deepseek-ai/dsh-typert-registry": "^0.2.1-rc.5",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
