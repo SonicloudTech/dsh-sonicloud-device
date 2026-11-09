@@ -1,4 +1,5 @@
 import { DevicePreferences } from './device-preferences.mjs';
+import { waitForRetry } from './retry.mjs';
 
 export class DeviceController {
   editors = new Map();
@@ -22,22 +23,13 @@ export class DeviceController {
         this.stream = this.api.watch(this.clientId, signal);
         for await (const event of this.stream) {
           if (signal.aborted) return;
-          if (event.type === 'devices' && this.reconnecting) {
-            this.reconnecting = false;
-          }
           await this.event(event);
         }
       } catch { /* Host reloads and transient transport failures are retried below. */ }
       finally { this.stream?.dispose?.(); this.stream = undefined; }
       if (signal.aborted) return;
-      this.reconnecting = true;
       this.publish({ status: '设备服务连接中断，正在重新连接…', devices: [] });
-      await new Promise(resolve => {
-        const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
-        const timer = setTimeout(done, this.retryDelayMs);
-        signal.addEventListener('abort', done, { once: true });
-        if (signal.aborted) done();
-      });
+      await waitForRetry(signal, this.retryDelayMs);
     }
   }
   async event(event) {

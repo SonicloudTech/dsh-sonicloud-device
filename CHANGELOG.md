@@ -5,6 +5,8 @@
 ### Changed
 
 - Document CI/CD platform configuration and release verification results with traceable workflow links.
+- Separate device event and speech result handling and share client retry waits, preserving functionality, protocols, and UI.
+- Streamline specifications and development documentation, centralize behavior contracts and verification records, and standardize development on npm by removing the outdated pnpm lockfile and placeholder configuration.
 
 ## 0.1.1 - 2026-11-09
 

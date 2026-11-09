@@ -1,3 +1,5 @@
+import { waitForRetry } from './retry.mjs';
+
 // Only public Harness session/navigation/input services are used; no DOM focus required.
 export class AiConversationClient {
   constructor(api, services, { retryDelayMs = 1000, view } = {}) {
@@ -109,12 +111,7 @@ export class AiConversationClient {
         for (const id of this.targets.keys()) this.release(id);
       }
       if (signal.aborted) return;
-      await new Promise(resolve => {
-        const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
-        const timer = setTimeout(done, this.retryDelayMs);
-        signal.addEventListener('abort', done, { once: true });
-        if (signal.aborted) done();
-      });
+      await waitForRetry(signal, this.retryDelayMs);
     }
   }
   dispose() {
