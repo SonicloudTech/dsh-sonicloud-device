@@ -1,6 +1,6 @@
 {
   "name": "dsh-sonicloud-device",
-  "version": "0.2.1",
+  "version": "0.1.0",
   "description": "DeepSeek Harness 智能鼠标、多设备设置与共享语音服务",
   "icon": "./src/client/assets/sonicloud.png",
   "type": "module",
