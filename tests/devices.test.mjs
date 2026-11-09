@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { DeviceManager } from '../src/devices/manager.mjs';
 import { DeviceStore } from '../src/devices/store.mjs';
-import { defaultPreferences, searchAddress, languageKey, REC_LANG_LIST, TRANS_FROM_LANG_LIST, TRANS_TO_LANG_LIST } from '../src/shared/devices.mjs';
+import { DevicePreferences } from '../src/client/device-preferences.mjs';
+import { defaultPreferences, searchAddress, webUrl, languageKey, REC_LANG_LIST, TRANS_FROM_LANG_LIST, TRANS_TO_LANG_LIST } from '../src/shared/devices.mjs';
 import { REMOTE } from '../src/shared/remote.mjs';
 import { ServiceStore } from '../src/host/store.mjs';
 import { recognitionQuery, DEFAULT_LANGUAGES } from '../src/devices/recognition.mjs';
@@ -32,7 +33,7 @@ async function fixture(overrides = {}) {
   const watching = (async () => { for await (const event of manager.watch('client', life.signal)) events.push(event); })();
   await until(() => events.length);
   const send = async event => { sdk.emit('event', event); await manager.pending; };
-  const key = (id, action, key = 'speech') => send({ type: 'message', id, message: { type: 'keyEvent', key, action } });
+  const key = (id, action, key = 'speech') => send({ type: 'message', id, message: { type: 'keyEvent', key, action, index: key === 'm' ? 1 : 0 } });
   const connect = (id, mode = 0) => send({ type: 'connected', id, mode });
   const stop = async () => { life.abort(); await watching; await manager.close(); };
   return { manager, sdk, credentials, events, audio, actions, send, key, connect, stop };
@@ -85,6 +86,101 @@ test('one-click URL is per SN; duplicate releases cannot repeat system actions',
     await s.key('0001', 'down', 'm'); await s.key('0001', 'hold', 'm'); await s.key('0001', 'up', 'm'); await s.key('0001', 'up', 'm');
     assert.deepEqual(s.actions, [['openUrl', 'https://example.com/path?a=1']]); assert.equal(s.manager.run, undefined);
     await assert.rejects(s.manager.save('0001', 1, { ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: 'javascript:alert(1)' }));
+  } finally { await s.stop(); }
+});
+test('a confirmed valid link replaces Baidu for the next M press; invalid drafts never reach the device', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001');
+    await s.manager.save('0001', 0, { ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: 'https://www.baidu.com' });
+    const editor = new DevicePreferences({ saveDevice: async (...args) => ({ ok: true, value: await s.manager.save(...args) }) }, s.manager.view().devices[0]);
+    for (const url of ['not a url', 'https://', 'https:google.com', 'https:///google.com', 'javascript:alert(1)', 'https://user:pass@example.com', 'https://example.com/a b', 'https://example.com/\\bad']) {
+      editor.change('linkUrl', url);
+      await editor.commitLink();
+      assert.equal(editor.snapshot().invalid, true, url);
+      assert.equal(s.manager.view().devices[0].revision, 1);
+      await assert.rejects(s.manager.save('0001', 1, { ...editor.snapshot().form }));
+    }
+    editor.change('linkUrl', ' www.google.com/search?q=test&hl=zh-CN ');
+    assert.equal(s.manager.view().devices[0].preferences.linkUrl, 'https://www.baidu.com');
+    await editor.commitLink();
+    await s.key('0001', 'down', 'm'); await s.key('0001', 'up', 'm');
+    assert.deepEqual(s.actions, [['openUrl', 'www.google.com/search?q=test&hl=zh-CN']]);
+    assert.equal((await s.manager.store.get('0001')).preferences.linkUrl, s.actions[0][1]);
+    editor.dispose();
+  } finally { await s.stop(); }
+});
+test('SDK m down/hold/up executes saved M actions once per device', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001'); await s.connect('0002', 1);
+    let revision = 0;
+    for (const mAction of ['enter', 'backspace', 'openWebUrl']) {
+      const linkUrl = 'https://example.com/m';
+      await s.manager.save('0001', revision++, { ...defaultPreferences(), mAction, linkUrl });
+      s.actions.length = 0;
+      await s.key('0001', 'down', 'm');
+      for (let i = 0; i < 22; i++) await s.key('0001', 'hold', 'm');
+      assert.deepEqual(s.actions, []);
+      await s.key('0001', 'up', 'm'); await s.key('0001', 'up', 'm');
+      assert.deepEqual(s.actions, [[mAction === 'openWebUrl' ? 'openUrl' : mAction, linkUrl]]);
+      assert.equal(s.manager.run, undefined);
+    }
+    await s.key('0002', 'down', 'm'); await s.key('0002', 'up', 'm');
+    assert.deepEqual(s.actions.at(-1), ['enter', '']);
+    assert.deepEqual(s.sdk.sources, []);
+  } finally { await s.stop(); }
+});
+test('SDK m starts and finishes each configured voice action without duplicate sessions', async () => {
+  const s = await fixture({ translate: async () => 'translated' });
+  try {
+    await s.connect('0001');
+    let revision = 0;
+    for (const mAction of ['voice_input', 'translate', 'speechSearch']) {
+      await s.manager.save('0001', revision++, { ...defaultPreferences(), mAction });
+      await s.key('0001', 'down', 'm');
+      const run = s.manager.run;
+      assert.equal(run.action, mAction);
+      s.manager.accept('client', run.id);
+      await s.key('0001', 'down', 'm');
+      assert.equal(s.manager.run, run);
+      await s.key('0001', 'up', 'm'); await until(() => !s.manager.run);
+      await until(() => s.events.some(e => e.sessionId === run.id && ['result', 'finished'].includes(e.type)));
+    }
+    assert.equal(s.events.filter(e => e.type === 'request').length, 3);
+    assert.equal(s.actions.length, 1);
+    assert.equal(s.actions[0][0], 'openUrl');
+    assert.deepEqual(s.events.filter(e => e.type === 'result').map(e => e.text), ['你好 & 世界#', 'translated']);
+  } finally { await s.stop(); }
+});
+test('SDK ai click activates AI without executing M preferences; down/up and raw releases are ignored', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001');
+    await s.manager.save('0001', 0, { ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: 'https://example.com/' });
+    await s.key('0001', 'click', 'ai');
+    await s.send({ type: 'message', id: '0001', message: { type: 'keyEvent', key: 'raw', action: 'up', code: 50, index: 0 } });
+    await s.key('0001', 'down', 'ai'); await s.key('0001', 'up', 'ai');
+    assert.deepEqual(s.actions, [['openAi', undefined]]);
+    assert.equal(s.manager.run, undefined);
+    assert.deepEqual(s.sdk.sources, []);
+    await s.key('0001', 'click', 'm');
+    assert.equal(s.actions.length, 1);
+  } finally { await s.stop(); }
+});
+test('SDK m freezes settings on down and reconnect clears pending actions', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001'); await s.key('0001', 'down', 'm');
+    await s.manager.save('0001', 0, { ...defaultPreferences(), mAction: 'backspace' });
+    await s.key('0001', 'up', 'm');
+    assert.deepEqual(s.actions, [['enter', '']]);
+    await s.key('0001', 'down', 'm');
+    await s.send({ type: 'disconnected', id: '0001', mode: 0 }); await s.connect('0001');
+    await s.key('0001', 'up', 'm');
+    assert.equal(s.actions.length, 1);
+    await s.key('0001', 'down', 'm'); await s.key('0001', 'up', 'm');
+    assert.deepEqual(s.actions.at(-1), ['backspace', '']);
   } finally { await s.stop(); }
 });
 test('translation uses final text and frozen from/to; cancellation discards a late translation', async () => {
@@ -164,6 +260,59 @@ test('URL and OS actions do not interpolate user input into shell commands', asy
   await assert.rejects(systemAction('openUrl', 'file:///etc/passwd', { platform: 'darwin', execute }));
   await systemAction('backspace', undefined, { platform: 'darwin', execute });
   assert.match(calls[1][1][1], /key code 51/);
+});
+
+test('URLs allow omitted protocols without rewriting input, storage or browser arguments', async () => {
+  const store = new DeviceStore(new MemoryCredentials());
+  let revision = 0;
+  for (const address of ['www.baidu.com', 'example.com/path?q=hello#part', 'example.com:8080/path', '127.0.0.1:8080', 'localhost:3000', '[::1]:8080/path', 'https://example.com', 'http://example.com']) {
+    assert.equal(webUrl(` ${address} `), address);
+    const saved = await store.save('0001', revision++, { ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: address });
+    assert.equal(saved.preferences.linkUrl, address);
+  }
+  for (const address of ['ftp://example.com', 'https:example.com', 'javascript:alert(1)', 'not a url', '/relative/path', '--bad.com', 'example..com']) assert.throws(() => webUrl(address));
+  for (const platform of ['darwin', 'win32', 'linux']) {
+    const calls = [];
+    await systemAction('openUrl', 'www.baidu.com/path?q=hello', { platform, execute: async (...args) => {
+      calls.push(args); return { stdout: 'com.google.Chrome\n' };
+    } });
+    const [file, args] = calls.at(-1);
+    assert.equal(args.at(-1), 'www.baidu.com/path?q=hello');
+    if (platform === 'darwin') {
+      assert.equal(calls.length, 2);
+      assert.equal(file, '/usr/bin/open');
+      assert.deepEqual(args, ['-n', '-b', 'com.google.Chrome', '--args', 'www.baidu.com/path?q=hello']);
+    }
+  }
+  await assert.rejects(systemAction('openUrl', 'example.com', {
+    platform: 'darwin', execute: async () => ({ stdout: '' }),
+  }), /浏览器打开失败/);
+});
+
+test('removed M actions fall back on read, preserve other preferences and cannot be saved or executed', async () => {
+  const s = await fixture();
+  try {
+    const legacy = { ...defaultPreferences(), mAction: 'backHome', dpi: '800', punctuation: false };
+    await s.credentials.modifyRecord('dsh-asr/devices', () => ({ kind: 'grant', payload: {
+      version: 1, devices: { '0001': { revision: 4, preferences: legacy } },
+    } }));
+    await s.connect('0001');
+    const device = s.manager.view().devices[0];
+    assert.equal(device.revision, 4);
+    assert.deepEqual(device.preferences, { ...legacy, mAction: 'enter' });
+    await s.key('0001', 'down', 'm'); await s.key('0001', 'up', 'm');
+    assert.deepEqual(s.actions, [['enter', '']]);
+    await assert.rejects(s.manager.save('0001', 4, legacy));
+    await s.manager.save('0001', 4, { ...device.preferences, mAction: 'backspace' });
+    assert.equal((await s.manager.store.get('0001')).preferences.mAction, 'backspace');
+    for (const platform of ['darwin', 'win32']) {
+      let called = false;
+      await assert.rejects(systemAction('backHome', undefined, {
+        platform, execute: async () => { called = true; },
+      }), /不支持此按键动作/);
+      assert.equal(called, false);
+    }
+  } finally { await s.stop(); }
 });
 
 test('a disconnect cancels the pending session; reconnect does not admit old-session audio/results', async () => {

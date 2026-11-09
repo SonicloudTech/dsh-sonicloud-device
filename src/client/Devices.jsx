@@ -19,7 +19,7 @@ function Select({ label, value, onChange, options }) {
 }
 function DeviceForm({ device, controller, state }) {
   const editor = controller.preferences(device);
-  const { form, busy, error } = useSyncExternalStore(editor.subscribe, editor.snapshot);
+  const { form, busy, error, invalid } = useSyncExternalStore(editor.subscribe, editor.snapshot);
   const change = (key, value) => editor.change(key, value);
   if (!device.identityConfirmed || !form) return <p role="status">设备身份未确认，暂不可编辑配置，请重连设备。</p>;
   const languages = REC_LANG_LIST.map(item => ({ value: languageKey(item), label: item.label + (state.recognitionLanguages.includes(languageKey(item)) ? '' : '（待适配）'), disabled: !state.recognitionLanguages.includes(languageKey(item)) }));
@@ -44,13 +44,16 @@ function DeviceForm({ device, controller, state }) {
       <Row label="DPI 键" description={<>用于调节鼠标光标移动灵敏度{device.dpiState === 'failed' && <><br /><span className="dsh-asr-error">DPI 尚未应用，请重新选择后重试</span></>}</>}><Select label="DPI" value={form.dpi} options={DPI_LIST} onChange={value => change('dpi', value)} /></Row>
       <div className="dsh-mouse-key-group">
         <Row label="M 键" description="鼠标多功能键"><Select label="M 键动作" value={form.mAction} options={M_KEY_FUNC_LIST} onChange={value => change('mAction', value)} /></Row>
-        {form.mAction === 'speechSearch' && <div className="dsh-mouse-subrow"><div className="dsh-mouse-controls"><span className="dsh-mouse-sublabel">搜索引擎</span><Select label="搜索引擎" value={form.searchUrl} options={M_KEY_SEARCH_URL_LIST} onChange={value => change('searchUrl', value)} /></div></div>}
-        {form.mAction === 'openWebUrl' && <div className="dsh-mouse-subrow"><div className="dsh-mouse-controls"><span className="dsh-mouse-sublabel">链接地址</span><Input aria-label="一键链接 URL" type="url" placeholder="https://example.com" value={form.linkUrl} onChange={event => change('linkUrl', event.target.value)} /></div></div>}
+        {form.mAction === 'speechSearch' && <div className="dsh-mouse-subrow"><div className="dsh-mouse-controls"><Select label="搜索引擎" value={form.searchUrl} options={M_KEY_SEARCH_URL_LIST} onChange={value => change('searchUrl', value)} /></div></div>}
+        {form.mAction === 'openWebUrl' && <div className="dsh-mouse-subrow"><div className="dsh-mouse-controls dsh-mouse-link-controls">
+          <Input aria-label="一键链接 URL" type="url" placeholder="https://example.com" value={form.linkUrl} aria-invalid={invalid || undefined} onChange={event => change('linkUrl', event.target.value)} />
+          <Button disabled={busy} onClick={() => editor.commitLink()}>确认</Button>
+        </div></div>}
       </div>
       <Row label="语音键" description="长按语音打字或翻译，松手将文字填充到已获取焦点的输入框"><Select label="语音键动作" value={form.speechAction} options={[{ value: 'voice_input', label: '语音打字' }, { value: 'translate', label: '语音翻译' }]} onChange={value => change('speechAction', value)} /></Row>
       <Row label="AI 键" description="长按语音打字，松手自动将文字发送给 AI"><Select label="AI 键动作" value={form.aiAction} options={[{ value: 'openAi', label: '打开 AI 对话' }]} onChange={value => change('aiAction', value)} /></Row>
     </div>
-    {error && <p role="alert" className="dsh-asr-error">{error}</p>}
+    {error && form.mAction !== 'openWebUrl' && <p role="alert" className="dsh-asr-error">{error}</p>}
     <div className="dsh-mouse-footer">
       <span role="status" className="dsh-asr-muted">{busy ? '正在应用…' : ''}</span>
       <Button size="sm" className="dsh-mouse-reset" onClick={() => editor.reset()}>恢复默认</Button>

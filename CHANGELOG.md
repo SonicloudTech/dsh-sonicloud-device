@@ -13,7 +13,9 @@
 
 ### Changed
 
-- Add usage descriptions for the DPI, M, speech, and AI keys; use small gray labels on the right for M-key sub-settings and remove the separator below the M-key selector.
+- Allow one-click links without an HTTP/HTTPS scheme; preserve the original address in the input, storage, and browser invocation without adding a scheme.
+
+- Add usage descriptions for the DPI, M, speech, and AI keys; remove text labels for M-key sub-settings and the separator below the M-key selector.
 - Hide save-success and DPI command delivery notices below device settings while retaining progress and error feedback.
 - **Breaking change**: rename the package and plugin ID from `dsh-asr` to `dsh-sonicloud-device`; upgrades require removing the old plugin, installing the new package, and reapplying host plugin configuration. Device preferences retain their storage key; legacy service credentials are cleared on startup.
 - Rename the settings sidebar entry and page from “我的设备” (My Devices) to “声云设备” (Sonicloud Devices).
@@ -28,6 +30,8 @@
 
 ### Fixed
 
+- Replace the one-click link label and inline messages with a Confirm button beside the input; validate and save only on confirmation, show error toasts without applying invalid edits or failed saves, and show a success toast after saving. Preserve drafts across status updates and late replies, and use the newly saved URL for subsequent button presses.
+
 - Refresh invalid tokens and retry once silently, showing a single toast on final failure; preserve unsent audio during retry and discard late output after cancellation.
 - Update development watching, test fixtures, and package contents to `docs/`, fixing development tests and missing packaged documentation after the directory migration.
 
@@ -36,6 +40,8 @@
 - Use the live-tested `lanid=100` for Traditional Mandarin instead of an ID that returns Simplified text, and disable translation source options without an ASR mapping.
 
 ### Removed
+
+- Remove the M-key Show Desktop option and its system action implementation; removed actions in saved preferences fall back to the default Enter action while preserving other settings.
 
 - Remove 11 voice typing options without an exact documented match and Mongolian as a voice translation source; retain 43 voice typing options, 27 translation sources, and the existing 28 translation targets. Saved removed selections prompt reselection and block affected voice actions without substituting another language.
 

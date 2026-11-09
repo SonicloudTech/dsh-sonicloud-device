@@ -13,7 +13,6 @@ export const M_KEY_FUNC_LIST = [
   { label: '语音打字', value: 'voice_input' },
   { label: '语音搜索', value: 'speechSearch' },
   { label: '一键链接', value: 'openWebUrl' },
-  { label: '一键桌面', value: 'backHome' },
 ]
 
 export const M_KEY_SEARCH_URL_LIST = [

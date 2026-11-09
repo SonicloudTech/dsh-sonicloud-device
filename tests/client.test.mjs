@@ -38,13 +38,17 @@ test('built client hides shared services, edits per-device preferences, and disp
       key: item.id, role: 'menuitem', disabled: item.disabled, 'data-value': item.id, onClick: () => onSelect(item.id),
     }, item.label))));
   const Switch = ({ checked, onChange, label }) => React.createElement('button', { role: 'switch', 'aria-label': label, 'aria-checked': checked, onClick: () => onChange(!checked) });
-  const Input = props => React.createElement('input', props);
+  let linkInputProps;
+  const Input = props => {
+    if (props['aria-label'] === '一键链接 URL') linkInputProps = props;
+    return React.createElement('input', props);
+  };
   const IconChevronDownOutlineRegular = () => null;
   const Toast = ({ text, onDone }) => React.createElement('div', { role: 'alert', 'data-test-toast': true }, text, React.createElement('button', { onClick: onDone }, '关闭提示'));
   const IconWarningOutlineRegular = () => null;
   let entry;
   const sandbox = { window: { __ModuleLoader__: { load: value => { entry = value; } } }, document: dom.window.document,
-    crypto: globalThis.crypto, AbortController, setTimeout, clearTimeout, console, MutationObserver: dom.window.MutationObserver };
+    crypto: globalThis.crypto, URL, AbortController, setTimeout, clearTimeout, console, MutationObserver: dom.window.MutationObserver };
   vm.runInNewContext(await readFile('dist/client.js', 'utf8'), sandbox);
   assert.equal(entry.id, 'dsh-sonicloud-device');
   const plugin = entry.factory(name => {
@@ -84,6 +88,7 @@ test('built client hides shared services, edits per-device preferences, and disp
     for (const [label, count, excluded] of [
       ['识别语言', 43, languageKey({ language: 'zh_cn', accent: 'hakkanese', rlang: '' })],
       ['翻译源语言', 27, 'mn'], ['翻译目标语言', 28, 'ii'],
+      ['M 键动作', 6, 'backHome'],
     ]) {
       await act(async () => dom.window.document.querySelector(`[aria-label="${label}"]`).click());
       const options = [...dom.window.document.querySelectorAll('[role="menuitem"]')];
@@ -98,6 +103,33 @@ test('built client hides shared services, edits per-device preferences, and disp
       assert.ok(option && !option.disabled);
       await act(async () => option.click());
     };
+    await setField('M 键动作', 'openWebUrl');
+    await act(async () => linkInputProps.onChange({ target: { value: 'https://' } }));
+    assert.equal(dom.window.document.querySelector('[role="alert"]'), null);
+    assert.doesNotMatch(dom.window.document.querySelector('.dsh-mouse-key-group').textContent, /链接地址|地址尚未保存/);
+    const blurLink = () => dom.window.document.querySelector('[aria-label="一键链接 URL"]').dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
+    await act(async () => blurLink());
+    assert.equal(dom.window.document.querySelector('[data-test-toast]'), null);
+    const confirmLink = () => [...dom.window.document.querySelectorAll('.dsh-mouse-link-controls button')].find(button => button.textContent === '确认').click();
+    await act(async () => confirmLink());
+    assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /设置未生效/);
+    assert.equal(dom.window.document.querySelector('.dsh-mouse-form [role="alert"]'), null);
+    assert.equal((await deviceStore.get('0001')).preferences.mAction, 'enter');
+    await act(async () => dom.window.document.querySelector('[data-test-toast] button').click());
+    await act(async () => linkInputProps.onChange({ target: { value: 'www.google.com' } }));
+    await act(async () => { events.push(devicesEvent()); });
+    assert.equal(dom.window.document.querySelector('[aria-label="一键链接 URL"]').value, 'www.google.com');
+    assert.equal((await deviceStore.get('0001')).preferences.linkUrl, '');
+    await act(async () => blurLink());
+    assert.equal((await deviceStore.get('0001')).preferences.linkUrl, '');
+    assert.equal(dom.window.document.querySelector('[data-test-toast]'), null);
+    await act(async () => confirmLink());
+    assert.equal((await deviceStore.get('0001')).preferences.linkUrl, 'www.google.com', dom.window.document.querySelector('[role="alert"]')?.textContent);
+    assert.equal((await deviceStore.get('0001')).preferences.mAction, 'openWebUrl');
+    assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /链接设置成功，已生效/);
+    assert.equal(settings.options.inject().controller.snapshot().toast.kind, 'success');
+    assert.equal(dom.window.document.querySelector('.dsh-mouse-form [role="alert"]'), null);
+    await act(async () => dom.window.document.querySelector('[data-test-toast] button').click());
     await setField('M 键动作', 'speechSearch');
     await setField('搜索引擎', 'https://www.bing.com/search?q=');
     assert.doesNotMatch(dom.window.document.body.textContent, /保存设备设置|重新加载/);

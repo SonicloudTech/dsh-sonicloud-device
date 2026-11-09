@@ -140,7 +140,7 @@ export class DeviceManager {
   async key(device, event) {
     if (device.type !== 'smart-mouse' || !this.owner) return;
     if (!device.identityConfirmed) {
-      if (event.action === 'down') this.publish({ type: 'notice', message: '设备身份未确认，请重新连接鼠标' });
+      if (event.action === 'down' || event.action === 'click') this.publish({ type: 'notice', message: '设备身份未确认，请重新连接鼠标' });
       return;
     }
     const key = `${device.id}:${event.key}:${event.index ?? 0}`;
@@ -152,8 +152,8 @@ export class DeviceManager {
       }
       return;
     }
-    // AI SDK provides click as well as down/up; handle click only.
-    if (event.key === 'ai' && event.action === 'click') { void this.execute('openAi'); return; }
+    // Use SDK key names directly; AI activation is bound to click only.
+    if (event.key === 'ai' && event.action === 'click') { void this.execute(device.preferences.aiAction); return; }
     if (event.action !== 'down' || !['speech', 'translation', 'm'].includes(event.key) || this.pressed.has(key)) return;
     this.pressed.set(key, structuredClone(device.preferences));
     const action = event.key === 'm' ? device.preferences.mAction : event.key === 'translation' ? 'translate' : device.preferences.speechAction;

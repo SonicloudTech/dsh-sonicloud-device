@@ -3,6 +3,6 @@ import { Toast, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-pri
 
 export function Notice({ controller }) {
   const { toast } = useSyncExternalStore(controller.subscribe, controller.snapshot);
-  return toast ? <Toast key={toast.id} text={toast.message} icon={<IconWarningOutlineRegular />}
+  return toast ? <Toast key={toast.id} text={toast.message} icon={toast.kind === 'success' ? undefined : <IconWarningOutlineRegular />}
     onDone={() => controller.dismissToast(toast.id)} /> : null;
 }

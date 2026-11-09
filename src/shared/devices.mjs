@@ -8,13 +8,29 @@ const recognitionValueSchema = z.object({ language: z.string(), accent: z.string
 export const recognitionSchema = recognitionValueSchema
   .refine(value => REC_LANG_LIST.some(item => languageKey(item) === languageKey(value)), '识别语言不存在');
 export function webUrl(value) {
-  const text = value.trim();
+  let text = value.trim();
+  const hasProtocol = /^https?:\/\//i.test(text);
+  if (!hasProtocol) {
+    // A host followed by a numeric port is not a URI scheme. The prefix is for parsing only.
+    if (/^[a-z][a-z\d+.-]*:/i.test(text) && !/^[^:/?#]+:\d+(?:[/?#]|$)/u.test(text)) {
+      throw new Error('请填写有效的 HTTP/HTTPS 网址');
+    }
+    if (/^https?:/i.test(text)) throw new Error('请填写有效的网址');
+    text = `https://${text}`;
+  }
+  if (!/^https?:\/\/[^/\\\s]/i.test(text) || value.trim().length > 4096) throw new Error('请填写有效的网址（最多 4096 字符）');
   let url;
   try { url = new URL(text); } catch { throw new Error('请填写完整 HTTP/HTTPS 地址'); }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || /[\u0000-\u0020]/u.test(text)) {
+  if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password || /[\\\u0000-\u0020\u007f]/u.test(text)) {
     throw new Error('请填写不含凭据和空白字符的 HTTP/HTTPS 地址');
   }
-  return text;
+  if (!hasProtocol && !url.hostname.includes('.') && !url.hostname.startsWith('[') && url.hostname !== 'localhost') {
+    throw new Error('请填写有效的域名或 IP 地址');
+  }
+  if (!url.hostname.startsWith('[') && url.hostname.replace(/\.$/, '').split('.').some(label => !/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(label))) {
+    throw new Error('请填写有效的域名或 IP 地址');
+  }
+  return value.trim();
 }
 export const preferencesSchema = z.object({
   recognition: recognitionSchema, punctuation: z.boolean(),
@@ -27,9 +43,10 @@ export const preferencesSchema = z.object({
     try { webUrl(value.linkUrl); } catch (error) { ctx.addIssue({ code: 'custom', path: ['linkUrl'], message: error.message }); }
   }
 });
-// 读取旧语言值供用户重新选择；写入仍使用严格的 preferencesSchema。
+// 读取旧语言值供用户重新选择；已移除的 M 键动作回退默认值，写入仍严格校验。
 export const storedPreferencesSchema = preferencesSchema.safeExtend({
   recognition: recognitionValueSchema, from: z.string(), to: z.string(),
+  mAction: choice(M_KEY_FUNC_LIST).catch(() => defaultPreferences().mAction),
 });
 export const defaultPreferences = () => ({
   recognition: { language: 'zh_cn', accent: 'mandarin', rlang: '' }, punctuation: true,

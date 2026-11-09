@@ -9,11 +9,11 @@ export class DeviceController {
   subscribe = listener => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   snapshot = () => this.state;
   preferences(device) {
-    if (!this.editors.has(device.sn)) this.editors.set(device.sn, new DevicePreferences(this.api, device));
+    if (!this.editors.has(device.sn)) this.editors.set(device.sn, new DevicePreferences(this.api, device, (message, kind) => this.notice(message, kind)));
     return this.editors.get(device.sn);
   }
   publish(patch) { this.state = { ...this.state, ...patch }; for (const listener of this.listeners) listener(); }
-  notice(message) { this.publish({ toast: { id: crypto.randomUUID(), message } }); }
+  notice(message, kind = 'error') { this.publish({ toast: { id: crypto.randomUUID(), message, kind } }); }
   dismissToast(id) { if (this.state.toast?.id === id) this.publish({ toast: undefined }); }
   settle(id) {
     this.settled.add(id);

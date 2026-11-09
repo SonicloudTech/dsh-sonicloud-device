@@ -47,17 +47,22 @@ test('restore defaults stays queued for its SN across device switches', async ()
   controller.dispose();
 });
 
-test('invalid link drafts are not sent, and completing the URL saves the action and address', async () => {
+test('link drafts are validated and saved only on confirmation, including action and trimmed address', async () => {
   const calls = [], editor = new DevicePreferences({ saveDevice: async (...args) => {
     calls.push(args); return saved(args[1] + 1, args[2]);
   } }, device());
   await editor.change('mAction', 'openWebUrl');
   await editor.change('linkUrl', 'https://');
   assert.equal(calls.length, 0);
+  assert.equal(editor.snapshot().error, '');
+  await editor.commitLink();
   assert.equal(editor.snapshot().invalid, true);
-  await editor.change('linkUrl', 'https://example.com');
+  await editor.change('linkUrl', '  https://example.com  ');
+  assert.equal(calls.length, 0);
+  await editor.commitLink();
   assert.equal(calls.length, 1);
   assert.equal(calls[0][2].mAction, 'openWebUrl');
+  assert.equal(calls[0][2].linkUrl, 'https://example.com');
   assert.equal(editor.snapshot().error, '');
 });
 
@@ -83,14 +88,111 @@ test('late save replies cannot erase invalid drafts or send queued changes after
   const api = deferredApi(), editor = new DevicePreferences(api, device());
   const saving = editor.change('punctuation', false);
   editor.change('mAction', 'openWebUrl');
+  editor.commitLink();
   api.requests[0].resolve(saved(1, api.requests[0].preferences));
   await saving;
   assert.equal(editor.snapshot().form.mAction, 'openWebUrl');
   assert.equal(editor.snapshot().invalid, true);
-  const next = editor.change('linkUrl', 'https://example.com');
+  editor.change('linkUrl', 'https://example.com');
+  const next = editor.commitLink();
   editor.reset();
   editor.dispose();
   api.requests[1].resolve(saved(2, api.requests[1].preferences));
   await next;
   assert.equal(api.requests.length, 2);
+});
+
+test('editing a saved Baidu URL preserves drafts through device snapshots and rejects invalid addresses on confirmation', async () => {
+  const original = { ...device(), preferences: { ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: 'https://www.baidu.com' } };
+  const api = deferredApi(), editor = new DevicePreferences(api, original);
+  editor.change('linkUrl', 'https://');
+  editor.sync(original);
+  assert.equal(editor.snapshot().form.linkUrl, 'https://');
+  assert.equal(editor.snapshot().error, '');
+  editor.commitLink();
+  assert.match(editor.snapshot().error, /当前修改尚未生效/);
+  assert.equal(api.requests.length, 0);
+  editor.sync(original);
+  assert.equal(editor.snapshot().form.linkUrl, 'https://');
+  editor.change('linkUrl', 'www.google.com');
+  editor.sync(original);
+  assert.equal(editor.snapshot().form.linkUrl, 'www.google.com');
+  assert.equal(api.requests.length, 0);
+  const saving = editor.commitLink();
+  assert.equal(api.requests[0].preferences.linkUrl, 'www.google.com');
+  api.requests[0].resolve(saved(1, api.requests[0].preferences));
+  await saving;
+  assert.equal(editor.confirmed.preferences.linkUrl, 'www.google.com');
+});
+
+test('a late successful or failed save cannot erase or auto-save a newer link draft', async () => {
+  for (const ok of [true, false]) {
+    const api = deferredApi(), editor = new DevicePreferences(api, { ...device(), preferences: {
+      ...defaultPreferences(), mAction: 'openWebUrl', linkUrl: 'https://www.baidu.com',
+    } });
+    const saving = editor.change('punctuation', false);
+    editor.change('linkUrl', 'https://www.google.com');
+    api.requests[0].resolve(ok ? saved(1, api.requests[0].preferences) : { ok: false, error: { message: '网络错误' } });
+    await saving;
+    editor.sync(editor.confirmed);
+    assert.equal(editor.snapshot().form.linkUrl, 'https://www.google.com');
+    assert.equal(api.requests.length, 1);
+    const next = editor.commitLink();
+    assert.equal(api.requests[1].preferences.linkUrl, 'https://www.google.com');
+    assert.equal(api.requests[1].revision, ok ? 1 : 0);
+    api.requests[1].resolve(saved(ok ? 2 : 1, api.requests[1].preferences));
+    await next;
+  }
+});
+
+test('switching M action or restoring defaults discards an uncommitted link draft', async () => {
+  const calls = [], editor = new DevicePreferences({ saveDevice: async (...args) => {
+    calls.push(args); return saved(args[1] + 1, args[2]);
+  } }, device());
+  editor.change('mAction', 'openWebUrl'); editor.change('linkUrl', 'invalid'); editor.commitLink();
+  await editor.change('mAction', 'backspace');
+  assert.equal(calls[0][2].mAction, 'backspace');
+  assert.equal(calls[0][2].linkUrl, '');
+  editor.change('mAction', 'openWebUrl'); editor.change('linkUrl', 'https://example.com');
+  await editor.reset();
+  assert.deepEqual(calls[1][2], defaultPreferences());
+  assert.equal(editor.snapshot().linkDirty, false);
+});
+
+test('link confirmation toasts report validation, server failure and success only after saving', async () => {
+  const api = deferredApi(), notices = [];
+  const editor = new DevicePreferences(api, device(), (...args) => notices.push(args));
+  editor.change('mAction', 'openWebUrl'); editor.change('linkUrl', 'https://');
+  editor.commitLink(); editor.commitLink();
+  assert.equal(api.requests.length, 0);
+  assert.equal(notices.length, 2);
+  assert.ok(notices.every(([message, kind]) => kind === 'error' && /设置未生效/.test(message)));
+  editor.change('linkUrl', 'https://www.google.com');
+  const failed = editor.commitLink();
+  assert.equal(notices.length, 2);
+  api.requests[0].resolve({ ok: false, error: { message: '保存失败' } });
+  await failed;
+  assert.match(notices[2][0], /保存失败/);
+  assert.equal(notices[2][1], 'error');
+  assert.equal(editor.confirmed.preferences.mAction, 'enter');
+  editor.change('mAction', 'openWebUrl'); editor.change('linkUrl', 'https://www.google.com');
+  const success = editor.commitLink();
+  assert.equal(notices.length, 3);
+  api.requests[1].resolve(saved(1, api.requests[1].preferences));
+  await success;
+  assert.deepEqual(notices[3], ['链接设置成功，已生效', 'success']);
+  assert.equal(editor.confirmed.preferences.linkUrl, 'https://www.google.com');
+});
+
+test('selecting one-click link with an existing URL still requires confirmation', async () => {
+  const api = deferredApi(), editor = new DevicePreferences(api, { ...device(), preferences: {
+    ...defaultPreferences(), linkUrl: 'https://example.com',
+  } });
+  editor.change('mAction', 'openWebUrl');
+  assert.equal(api.requests.length, 0);
+  assert.equal(editor.confirmed.preferences.mAction, 'enter');
+  const saving = editor.commitLink();
+  api.requests[0].resolve(saved(1, api.requests[0].preferences));
+  await saving;
+  assert.equal(editor.confirmed.preferences.mAction, 'openWebUrl');
 });
