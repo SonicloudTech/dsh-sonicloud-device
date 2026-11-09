@@ -196,3 +196,40 @@ test('selecting one-click link with an existing URL still requires confirmation'
   await saving;
   assert.equal(editor.confirmed.preferences.mAction, 'openWebUrl');
 });
+
+test('hardware DPI updates preserve link drafts and use the new revision on confirmation', async () => {
+  for (const invalid of [false, true]) {
+    const api = deferredApi(), editor = new DevicePreferences(api, device());
+    editor.change('mAction', 'openWebUrl'); editor.change('linkUrl', 'https://');
+    if (invalid) editor.commitLink();
+    editor.sync({ ...device(), revision: 1, dpiRaw: 0, dpiState: 'reported', preferences: { ...defaultPreferences(), dpi: '800' } });
+    assert.equal(editor.snapshot().form.dpi, '800');
+    assert.equal(editor.snapshot().form.linkUrl, 'https://');
+    assert.equal(editor.snapshot().invalid, invalid);
+    assert.equal(api.requests.length, 0);
+    editor.change('linkUrl', 'www.google.com');
+    const saving = editor.commitLink();
+    assert.equal(api.requests[0].revision, 1);
+    assert.equal(api.requests[0].preferences.dpi, '800');
+    api.requests[0].resolve(saved(2, api.requests[0].preferences));
+    await saving;
+  }
+});
+
+test('hardware DPI updates survive late save replies and queued edits', async () => {
+  const api = deferredApi(), editor = new DevicePreferences(api, device());
+  const saving = editor.change('punctuation', false);
+  editor.change('speechAction', 'translate');
+  editor.sync({ ...device(), revision: 2, dpiRaw: 3, dpiState: 'reported', preferences: {
+    ...defaultPreferences(), punctuation: false, dpi: '2400',
+  } });
+  assert.equal(editor.snapshot().form.dpi, '2400');
+  assert.equal(editor.snapshot().form.speechAction, 'translate');
+  api.requests[0].resolve(saved(1, api.requests[0].preferences));
+  await Promise.resolve();
+  assert.equal(api.requests[1].revision, 2);
+  assert.equal(api.requests[1].preferences.dpi, '2400');
+  api.requests[1].resolve(saved(3, api.requests[1].preferences));
+  await saving;
+  assert.equal(editor.snapshot().form.dpi, '2400');
+});

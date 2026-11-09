@@ -46,6 +46,8 @@
 
 ### Fixed
 
+- Fix device settings not following physical DPI-button changes; use a separate report mapping to update the originating device and its saved DPI, preserve link drafts, and prevent redundant commands and stale save replies from overwriting newer state.
+
 - Fix AI-key navigation leaving Settings open and failing to fill conversations created from other pages: dismiss Settings, create the conversation in an available workspace, and wait for the target composer before inserting text.
 
 - Fix speech insertion in macOS Zed, which does not expose editable accessibility controls: use guarded paste when the window, document and input activity remain unchanged, restoring prior clipboard formats without overwriting newer copies.

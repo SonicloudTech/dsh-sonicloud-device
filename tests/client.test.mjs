@@ -21,6 +21,11 @@ test('built client hides shared services, edits per-device preferences, and disp
   const deviceStore = new DeviceStore(new MemoryCredentials());
   let connectedDevices = [];
   const devicesEvent = () => ({ type: 'devices', status: '就绪', devices: connectedDevices, recognitionLanguages: [languageKey(defaultPreferences().recognition)], translationReady: false });
+  const reportDpi = async (sn, dpi, level) => {
+    const saved = await deviceStore.reportDpi(sn, dpi);
+    connectedDevices = connectedDevices.map(device => device.sn === sn ? { ...device, ...saved, dpiRaw: level, dpiState: 'reported' } : device);
+    events.push(devicesEvent());
+  };
   const api = {
     watch: () => events,
     saveDevice: async (sn, revision, preferences) => {
@@ -95,6 +100,10 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'false');
     assert.equal((await deviceStore.get('0001')).preferences.aiAutoSend, false);
     assert.equal((await deviceStore.get('0002')).preferences.aiAutoSend, true);
+    await act(async () => reportDpi('0001', '800', 0));
+    assert.equal(dom.window.document.querySelector('[aria-label="DPI"]').textContent, '800');
+    await act(async () => reportDpi('0002', '1200', 1));
+    assert.equal(dom.window.document.querySelector('[aria-label="DPI"]').textContent, '800');
     for (const [label, count, excluded] of [
       ['识别语言', 43, languageKey({ language: 'zh_cn', accent: 'hakkanese', rlang: '' })],
       ['翻译源语言', 27, 'mn'], ['翻译目标语言', 28, 'ii'],
@@ -129,6 +138,9 @@ test('built client hides shared services, edits per-device preferences, and disp
     await act(async () => linkInputProps.onChange({ target: { value: 'www.google.com' } }));
     await act(async () => { events.push(devicesEvent()); });
     assert.equal(dom.window.document.querySelector('[aria-label="一键链接 URL"]').value, 'www.google.com');
+    await act(async () => reportDpi('0001', '2400', 3));
+    assert.equal(dom.window.document.querySelector('[aria-label="DPI"]').textContent, '2400');
+    assert.equal(dom.window.document.querySelector('[aria-label="一键链接 URL"]').value, 'www.google.com');
     assert.equal((await deviceStore.get('0001')).preferences.linkUrl, '');
     await act(async () => blurLink());
     assert.equal((await deviceStore.get('0001')).preferences.linkUrl, '');
@@ -146,6 +158,7 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.equal((await deviceStore.get('0001')).preferences.mAction, 'speechSearch');
     assert.equal((await deviceStore.get('0002')).preferences.mAction, 'enter');
     await act(async () => dom.window.document.querySelector('[aria-label="下一台设备"]').click());
+    assert.equal(dom.window.document.querySelector('[aria-label="DPI"]').textContent, '1200');
     assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'true');
     assert.equal(dom.window.document.querySelector('[aria-label="M 键动作"]').textContent, '回车');
     assert.match(dom.window.document.body.textContent, /0002/);
@@ -158,7 +171,7 @@ test('built client hides shared services, edits per-device preferences, and disp
     await act(async () => dom.window.document.querySelector('.dsh-mouse-reset').click());
     assert.equal(autoSendSwitch().getAttribute('aria-checked'), 'true');
     assert.deepEqual((await deviceStore.get('0001')).preferences, defaultPreferences());
-    assert.deepEqual((await deviceStore.get('0002')).preferences, defaultPreferences());
+    assert.deepEqual((await deviceStore.get('0002')).preferences, { ...defaultPreferences(), dpi: '1200' });
 
     connectedDevices = [{ ...connectedDevices[0], id: '0003', sn: '0003', revision: 0, preferences: {
       ...defaultPreferences(), recognition: { language: 'zh_cn', accent: 'hakkanese', rlang: '' }, from: 'mn', to: 'ii', punctuation: false,

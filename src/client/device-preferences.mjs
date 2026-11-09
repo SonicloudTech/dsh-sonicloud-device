@@ -18,10 +18,15 @@ export class DevicePreferences {
   publish(patch) { this.state = { ...this.state, ...patch }; for (const listener of this.listeners) listener(); }
   sync(device) {
     if (device.revision < this.confirmed.revision) return;
+    const dpiReported = device.dpiState === 'reported' && (device.dpiRaw !== this.confirmed.dpiRaw
+      || device.preferences?.dpi !== this.confirmed.preferences?.dpi || this.confirmed.dpiState !== 'reported');
     this.confirmed = device;
     if (!this.state.busy && !this.state.invalid && !this.state.linkDirty) {
       this.revision = device.revision;
       this.publish({ form: device.preferences });
+    } else if (dpiReported) {
+      if (!this.state.busy) this.revision = device.revision;
+      this.publish({ form: { ...this.state.form, dpi: device.preferences.dpi } });
     }
   }
   change(key, value) {
@@ -65,7 +70,7 @@ export class DevicePreferences {
         const result = await this.api.saveDevice(this.sn, this.revision, this.state.form);
         if (!result.ok) throw new Error(result.error?.message || '设备设置保存失败');
         const saved = result.value;
-        this.revision = saved.revision;
+        this.revision = Math.max(saved.revision, this.confirmed.revision);
         if (saved.revision >= this.confirmed.revision) this.confirmed = saved;
         if (sequence === this.sequence) this.publish({ form: this.confirmed.preferences, notice: saved.message, error: '' });
         if (!this.disposed && this.linkConfirmation === sequence) {

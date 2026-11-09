@@ -223,6 +223,78 @@ test('DPI uses firmware bytes, preserves failure state and retries; channel chan
     await s.connect('usb-temp'); assert.equal(s.manager.view().devices[1].identityConfirmed, false);
   } finally { await s.stop(); }
 });
+test('hardware DPI reports update only their device, persist, deduplicate and never send commands', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001'); await s.connect('0002');
+    const editor = new DevicePreferences({}, s.manager.view().devices[0]);
+    let revision = 0;
+    for (const [level, dpi] of [[0, '800'], [1, '1200'], [2, '1600'], [3, '2400']]) {
+      await s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level } });
+      const snapshot = s.events.filter(event => event.type === 'devices').at(-1);
+      const device = snapshot.devices[0];
+      editor.sync(device);
+      assert.equal(editor.snapshot().form.dpi, dpi);
+      assert.equal(device.dpiState, 'reported');
+      assert.equal(device.revision, ++revision);
+      assert.equal(snapshot.devices[1].preferences.dpi, '1600');
+      assert.equal((await s.manager.store.get('0001')).preferences.dpi, dpi);
+      await s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level } });
+      assert.equal(s.manager.view().devices[0].revision, revision);
+    }
+    assert.deepEqual(s.sdk.dpis, []);
+    await assert.rejects(s.manager.save('0001', 0, defaultPreferences()), /已变更/);
+    await s.send({ type: 'disconnected', id: '0001', mode: 0 }); await s.connect('0001', 1);
+    assert.equal(s.manager.view().devices.find(device => device.sn === '0001').preferences.dpi, '2400');
+    assert.deepEqual(s.sdk.dpis, [['0001', 63]]);
+  } finally { await s.stop(); }
+});
+test('DPI reports reject unknown bytes and identities and use their own firmware mapping', async () => {
+  const s = await fixture({ config: { dpiReportLevels: { '800': 9, '1200': 10 } } });
+  try {
+    await s.connect('0001'); await s.connect('usb-temp');
+    for (const level of [0, 21, 255, -1, 256, 1.5, '9', null, undefined]) {
+      await s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level } });
+      assert.equal(s.manager.view().devices[0].preferences.dpi, '1600');
+      assert.equal(s.manager.view().devices[0].revision, 0);
+    }
+    await s.send({ type: 'message', id: 'usb-temp', message: { type: 'dpiChanged', level: 9 } });
+    assert.equal(s.manager.view().devices[1].preferences, undefined);
+    await s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level: 9 } });
+    assert.equal(s.manager.view().devices[0].preferences.dpi, '800');
+    assert.deepEqual(s.sdk.dpis, []);
+  } finally { await s.stop(); }
+});
+test('DPI reports preserve legacy language settings and recover a failed software setting', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001'); s.sdk.dpi = async () => 0;
+    await s.manager.save('0001', 0, { ...defaultPreferences(), dpi: '800' });
+    await s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level: 0 } });
+    assert.equal(s.manager.view().devices[0].dpiState, 'reported');
+    await s.credentials.modifyRecord('dsh-asr/devices', record => {
+      record.payload.devices['0001'].preferences.from = 'mn'; return record;
+    });
+    await s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level: 1 } });
+    assert.equal(s.manager.view().devices[0].preferences.from, 'mn');
+    assert.equal(s.manager.view().devices[0].preferences.dpi, '1200');
+  } finally { await s.stop(); }
+});
+test('software saves and hardware DPI reports are processed in arrival order', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001');
+    let release;
+    s.sdk.dpi = () => new Promise(resolve => { release = resolve; });
+    const saving = s.manager.save('0001', 0, { ...defaultPreferences(), dpi: '800' });
+    await until(() => release);
+    const reporting = s.send({ type: 'message', id: '0001', message: { type: 'dpiChanged', level: 3 } });
+    release(1); await saving; await reporting;
+    assert.equal(s.manager.view().devices[0].preferences.dpi, '2400');
+    assert.equal((await s.manager.store.get('0001')).preferences.dpi, '2400');
+    assert.equal(s.manager.view().devices[0].dpiState, 'reported');
+  } finally { await s.stop(); }
+});
 test('bounded PCM packets preserve callback boundaries and pad only the tail', () => {
   const values = [], p = new PcmPackets(chunk => values.push(Buffer.from(chunk, 'base64')));
   p.write(Buffer.alloc(3198, 1)); p.write(Buffer.alloc(8, 2)); p.flush();

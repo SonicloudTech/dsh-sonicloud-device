@@ -17,6 +17,7 @@ export class DeviceManager {
     this.status = '尚未连接 SDK'; this.disposed = false;
     this.languages = config.recognitionLanguages ?? DEFAULT_LANGUAGES;
     this.dpiLevels = config.dpiLevels ?? { '800': 21, '1200': 32, '1600': 42, '2400': 63 };
+    this.dpiReportLevels = config.dpiReportLevels ?? { '800': 0, '1200': 1, '1600': 2, '2400': 3 };
     this.onEvent = event => {
       // Audio is copied in the worker. Process it synchronously in IPC order; commands are serialized separately.
       if (event.type === 'audio') { this.audio(event); return; }
@@ -115,14 +116,26 @@ export class DeviceManager {
         if (Number.isFinite(message.battery) && message.battery >= 0 && message.battery <= 100) device.battery = message.battery;
         this.snapshot();
       } else if (message.type === 'dpiChanged') {
+        if (!Number.isInteger(message.level) || message.level < 0 || message.level > 255) return;
         device.dpiRaw = message.level;
-        // Broadcast encodings may differ from command encodings; do not infer applied state.
+        // Hardware broadcasts use a separate mapping from software command bytes.
+        const matches = Object.entries(this.dpiReportLevels).filter(([, level]) => level === message.level);
+        if (matches.length === 1 && device.type === 'smart-mouse' && device.identityConfirmed) {
+          Object.assign(device, await this.store.reportDpi(device.sn, matches[0][0]));
+          device.dpiState = 'reported';
+        } else if (device.dpiState === 'reported') device.dpiState = 'unknown';
         this.snapshot();
       } else if (message.type === 'keyEvent') await this.key(device, message);
     }
   }
   clearPressed(id) { for (const key of this.pressed.keys()) if (key.startsWith(id + ':')) this.pressed.delete(key); }
-  async save(sn, revision, preferences) {
+  save(sn, revision, preferences) {
+    // Keep UI saves and hardware reports in order so neither overwrites newer state.
+    const saving = this.pending.then(() => this.savePreferences(sn, revision, preferences));
+    this.pending = saving.catch(() => {});
+    return saving;
+  }
+  async savePreferences(sn, revision, preferences) {
     const device = [...this.devices.values()].find(item => item.sn === sn && item.identityConfirmed);
     if (!device || device.type !== 'smart-mouse') throw new Error('设备已离线、SN 未确认或不支持此配置');
     const connectionId = device.connectionId;

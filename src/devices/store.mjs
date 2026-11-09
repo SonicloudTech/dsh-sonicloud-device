@@ -14,6 +14,19 @@ export class DeviceStore {
     const saved = (await this.state()).devices[sn];
     return { revision: saved?.revision ?? 0, preferences: storedPreferencesSchema.parse({ ...defaultPreferences(), ...saved?.preferences }) };
   }
+  async reportDpi(sn, dpi) {
+    snSchema.parse(sn);
+    await this.state();
+    await this.credentials.modifyRecord(KEY, record => {
+      const state = structuredClone(record.payload);
+      const saved = state.devices[sn];
+      const preferences = storedPreferencesSchema.parse({ ...defaultPreferences(), ...saved?.preferences, dpi });
+      if (saved?.preferences.dpi === dpi) return record;
+      state.devices[sn] = { revision: (saved?.revision ?? 0) + 1, preferences };
+      return { kind: 'grant', payload: state };
+    });
+    return this.get(sn);
+  }
   async save(sn, revision, input) {
     snSchema.parse(sn);
     const preferences = preferencesSchema.parse(input);
