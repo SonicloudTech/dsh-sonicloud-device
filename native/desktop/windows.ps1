@@ -6,4 +6,4 @@ $references = @('System.Windows.Forms', 'System.Drawing', 'System.Web.Extensions
   [System.Windows.Automation.AutomationElement].Assembly.Location,
   [System.Windows.Automation.Text.TextPatternRangeEndpoint].Assembly.Location)
 Add-Type -Path (Join-Path $PSScriptRoot 'VoicePanel.cs') -ReferencedAssemblies $references
-[Sonicloud.VoicePanel]::Run()
+[Sonicloud.VoicePanel]::Run($PSScriptRoot)

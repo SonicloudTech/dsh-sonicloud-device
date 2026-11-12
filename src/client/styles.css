@@ -21,6 +21,12 @@
 .dsh-asr-field input { box-sizing:border-box; width:100%; min-width:0; height:36px; padding:6px 10px; border:1px solid var(--dsw-alias-settings-card-stroke,#d8d8dc); border-radius:var(--dsw-radius-md,10px); color:inherit; background:var(--dsw-alias-settings-card-fill,#fff); font:inherit; }
 .dsh-asr-field input:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe); outline-offset:2px; }
 .dsh-mouse-settings { width:100%; color:var(--dsw-alias-label-primary,#14161a); }
+.dsh-mouse-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:12px; }
+.dsh-mouse-head h2 { margin:0; }
+/* main 全局面板：对齐宿主插件页结构——页面根占据全高并自带纵向滚动，内容限宽居中；顶部安全距离仅 darwin 需要（Windows 为原生标题栏）。 */
+.dsh-mouse-panel { box-sizing:border-box; height:100%; padding:0 clamp(24px,4vw,48px); display:flex; flex-direction:column; align-items:center; overflow:hidden auto; }
+.dsh-mouse-panel > .dsh-mouse-settings { flex:none; max-width:720px; padding:28px 0 48px; }
+[data-platform='darwin'] .dsh-mouse-panel > .dsh-mouse-settings { padding-top:calc(28px + var(--dsh-frame-top-clearance,0px)); }
 .dsh-mouse-settings h2 { margin:0 0 12px; font-size:16px; line-height:24px; font-weight:500; }
 .dsh-mouse-settings h3 { font-size:16px; font-weight:600; }
 .dsh-mouse-carousel { display:flex; align-items:center; justify-content:center; gap:80px; padding:40px 20px 0; }

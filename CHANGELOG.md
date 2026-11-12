@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 - 2026-11-12
+
+### Added
+
+- Add a Sonicloud Devices panel to the left navigation bar with the same device management UI as the settings page; shown by default, with a settings-page switch to hide or restore it without affecting the settings page.
+- Switch Windows voice typing and translation to the typer injection library: text is typed live into the focused window character by character while speaking, with automatic backspace corrections, and finalized on release; translation types only the final translated text. Character injection never reads from or writes to the clipboard; password fields, a missing library, or rejected injection (for example, elevated windows) keep the result available to copy.
+- Restore the Harness window for the AI button on Windows: activation now restores minimized windows directly, and for tray-hidden windows launches a second instance of the running app (stripping node-mode Electron environment overrides) handled by its single-instance handler; an activation failure alone no longer blocks filling the conversation draft.
+- Offer one-click submit on Windows when the AI conversation cannot be filled: the overlay keeps the recognized text, prompts to open a target input, and types it into the focused window through the typer library when clicked.
 
 ### Changed
 

@@ -212,7 +212,8 @@ export class DeviceManager {
   async prepareAi(run) {
     try {
       if (!this.aiConversation || !this.desktop) throw new Error('AI 对话功能不可用，请重新加载插件');
-      await this.action('openAi');
+      // Activation failure alone must not abort: with the window tray-hidden the renderer lives on and insertion still works.
+      try { await this.action('openAi'); } catch { run.aiActivateFailed = true; }
       run.lifetime.signal.throwIfAborted();
       await this.aiConversation.prepare(run);
       return {};
@@ -305,10 +306,22 @@ export class DeviceManager {
       if (this.run !== run || run.closing) return;
       // Keep the complete text available in the native panel if target preparation/insertion fails.
       this.publish({ type: 'preview', sessionId: run.id, text });
-      if (prepared.error) throw prepared.error;
-      await this.aiConversation.insert(run, text);
-      if (this.run !== run || run.closing) return;
-      this.publish({ type: 'finished', sessionId: run.id });
+      try {
+        if (prepared.error) throw prepared.error;
+        await this.aiConversation.insert(run, text);
+        if (this.run !== run || run.closing) return;
+        this.publish(run.aiActivateFailed
+          ? { type: 'failed', sessionId: run.id, message: '窗口未唤起，文字已填入对话草稿，可复制结果' }
+          : { type: 'finished', sessionId: run.id });
+      } catch (error) {
+        // On Windows the panel keeps the text so the user can focus any input and submit it there.
+        if (this.desktop?.platform === 'win32') {
+          this.publish({ type: 'submitOffer', sessionId: run.id, text, message: '请打开需要输入界面' });
+          await this.finish(run);
+          return;
+        }
+        throw error;
+      }
     } else if (run.action === 'speechSearch') {
       await this.action('openUrl', searchAddress(run.preferences.searchUrl, text));
       if (this.run !== run || run.closing) return;

@@ -5,12 +5,14 @@ import { DeviceController } from './controller.mjs';
 import { AiConversationClient } from './ai-conversation.mjs';
 import { AiConversationView } from './ai-conversation-view.mjs';
 import { AiConversationTarget } from './AiConversationTarget.jsx';
-import { Devices } from './Devices.jsx';
+import { Devices, DevicesPanel } from './Devices.jsx';
 import { Notice } from './Notice.jsx';
 import { SonicloudIcon } from './SonicloudIcon.jsx';
+import { SidebarPanelPreference, attachSidebarPanel } from './sidebar-panel.mjs';
 import css from './styles.css';
 export const inject = ['remote', 'slots'];
 export async function apply(ctx) {
+  const preferences = new SidebarPanelPreference(typeof localStorage === 'undefined' ? undefined : localStorage);
   const unmountRemote = await ctx.remote.$mount(REMOTE);
   const view = new AiConversationView({ document, closeTopModal });
   let ui, aiUi;
@@ -25,7 +27,7 @@ export async function apply(ctx) {
         return () => { controller.dispose(); style.remove(); };
       });
       scope.slots.inject('settings.section', () => scope.slots.register({
-        name: 'settings.section', id: 'dsh-sonicloud-device', order: 11, label: () => '声云设备', inject: () => ({ api, controller }),
+        name: 'settings.section', id: 'dsh-sonicloud-device', order: 11, label: () => '声云设备', inject: () => ({ api, controller, sidebar: preferences }),
       }, Devices));
       scope.slots.inject('settings.section.icon', () => scope.slots.register({
         name: 'settings.section.icon', id: 'dsh-sonicloud-device',
@@ -36,6 +38,11 @@ export async function apply(ctx) {
       scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
         name: 'conversation.input.overlay', id: 'dsh-sonicloud-device-ai-target', inject: () => ({ view }),
       }, AiConversationTarget));
+      scope.effect(() => attachSidebarPanel(scope, {
+        icon: SonicloudIcon, panel: DevicesPanel,
+        props: () => ({ controller, sidebar: preferences }),
+        preferences,
+      }));
     });
     await ui;
     aiUi = ctx.inject(['remote.asr', 'sessions', 'layout', 'conversation', 'uiWorkspace', 'workspaces'], scope => {

@@ -392,6 +392,23 @@ test('URL and OS actions do not interpolate user input into shell commands', asy
   assert.match(calls[1][1][1], /key code 51/);
 });
 
+test('openAi on Windows restores the window, strips node-mode env and falls back to a second launch', async () => {
+  const calls = [];
+  await systemAction('openAi', undefined, { platform: 'win32', execute: async (...args) => calls.push(args) });
+  const [file, args] = calls.at(-1);
+  assert.equal(file, 'powershell.exe');
+  const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');
+  // AppActivate never restores a minimized window; the fast path needs ShowWindow(SW_RESTORE) + foreground.
+  assert.match(script, /ShowWindow\(\$p\.MainWindowHandle, 9\)/);
+  assert.match(script, /SetForegroundWindow/);
+  // The plugin backend runs the app exe as node (ELECTRON_RUN_AS_NODE); a second launch must not inherit that.
+  assert.match(script, /Remove-Item Env:\\ELECTRON_RUN_AS_NODE/);
+  assert.ok(script.indexOf('Remove-Item Env:') < script.indexOf("Start-Process -FilePath $exe"), 'env must be cleaned before launching');
+  assert.ok(script.indexOf("Start-Process -FilePath $exe") < script.indexOf('rundll32.exe'), 'direct exe launch takes priority');
+  assert.match(script, /'dsh:\/\/open'/);
+  assert.doesNotMatch(script, /exit 1/);
+});
+
 test('URLs allow omitted protocols without rewriting input, storage or browser arguments', async () => {
   const store = new DeviceStore(new MemoryCredentials());
   let revision = 0;

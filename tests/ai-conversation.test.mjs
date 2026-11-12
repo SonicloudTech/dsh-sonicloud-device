@@ -61,8 +61,8 @@ async function fixture(options = {}) {
   const sdk = new EventEmitter();
   sdk.start = async () => {}; sdk.sources = []; sdk.source = async id => { sdk.sources.push(id); return 1; }; sdk.close = async () => {};
   const events = [], actions = [], audio = [];
-  const desktop = { begin: async run => events.push({ type: 'begin', action: run.action }), event: e => events.push(e),
-    complete: async () => assert.fail('AI speech must never use system input insertion'), close: async () => {} };
+  const desktop = { platform: options.desktopPlatform, begin: async run => events.push({ type: 'begin', action: run.action }),
+    event: e => events.push(e), complete: async () => assert.fail('AI speech must never use system input insertion'), close: async () => {} };
   const manager = new DeviceManager({ credentials: new MemoryCredentials(), sdk, desktop, aiConversation: bridge,
     config: { tailMs: 0 }, action: async action => { actions.push(action); if (options.activationError) throw new Error('唤起失败'); },
     recognize: async function* ({ uplink, signal }) {
@@ -233,7 +233,7 @@ test('a second device or another key cannot end or steal an AI recording', async
   } finally { await s.stop(); }
 });
 
-for (const options of [{ activationError: true }, { blocked: true }, { create: async () => { throw new Error('create failed'); }, panel: 'settings' }]) {
+for (const options of [{ blocked: true }, { create: async () => { throw new Error('create failed'); }, panel: 'settings' }]) {
   test(`AI target failure retains final text for copying: ${Object.keys(options)[0]}`, async () => {
     const s = await fixture(options);
     try {
@@ -246,6 +246,33 @@ for (const options of [{ activationError: true }, { blocked: true }, { create: a
     } finally { await s.stop(); }
   });
 }
+
+test('activation failure alone still fills the draft and reports where the text went', async () => {
+  const s = await fixture({ activationError: true });
+  try {
+    await s.key('down'); await s.key('up'); await until(() => !s.manager.run);
+    assert.equal(s.inserted.length, 1);
+    assert.equal(s.drafts.get('existing'), '已有草稿\n\n语音结果');
+    assert.deepEqual(s.submitted, [['existing', '已有草稿\n\n语音结果']]);
+    assert.ok(s.events.some(e => e.type === 'preview' && e.text === '语音结果'));
+    assert.ok(s.events.some(e => e.type === 'failed' && e.message === '窗口未唤起，文字已填入对话草稿，可复制结果'));
+    assert.equal(s.events.some(e => e.type === 'finished'), false);
+  } finally { await s.stop(); }
+});
+
+test('Windows insertion failure keeps the recognized text for one-click submit instead of failing', async () => {
+  const s = await fixture({ blocked: true, desktopPlatform: 'win32' });
+  try {
+    await s.key('down'); await s.key('up'); await until(() => !s.manager.run);
+    assert.equal(s.inserted.length, 0); assert.deepEqual(s.submitted, []);
+    const offer = s.events.find(e => e.type === 'submitOffer');
+    assert.ok(offer, 'a submit offer must reach the panel');
+    assert.equal(typeof offer.sessionId, 'string'); assert.ok(offer.sessionId.length > 0);
+    assert.equal(offer.text, '语音结果'); assert.equal(offer.message, '请打开需要输入界面');
+    assert.equal(s.events.some(e => e.type === 'failed'), false);
+    assert.equal(s.events.some(e => e.type === 'finished'), false);
+  } finally { await s.stop(); }
+});
 
 for (const options of [{ text: '' }, { recognitionError: true }]) {
   test(`empty or failed recognition never inserts AI text: ${Object.keys(options)[0]}`, async () => {

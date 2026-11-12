@@ -34,7 +34,7 @@ Supports Apple silicon Macs and Windows x64. The plugin identifies your mouse an
 | Buttons and sensitivity | Assign Enter, Backspace, Open Link, or other actions to the M button, and adjust mouse DPI |
 | Multiple mice | View each mouse's connection, battery level, and serial number, and save its language, button, and sensitivity settings separately |
 
-Manage these options in **Settings → Sonicloud Devices (设置 → 声云设备)**. Changes save automatically. **Restore Defaults (恢复默认)** resets only the current mouse, and reconnecting restores its saved settings.
+Manage these options in **Settings → Sonicloud Devices (设置 → 声云设备)**. Changes save automatically. **Restore Defaults (恢复默认)** resets only the current mouse, and reconnecting restores its saved settings. The left navigation bar also shows a **Sonicloud Devices (声云设备)** panel with the same device management UI by default; use the Sidebar (侧边栏) switch on the Sonicloud Devices title row to hide or restore it. Hiding the panel does not affect the settings page.
 
 ![Sonicloud Devices settings showing mouse information, voice typing, translation, and DPI options](docs/images/sonicloud-device.png)
 
@@ -53,11 +53,13 @@ Keep the target window, document, and input position unchanged during recording,
 
 On macOS, automatic insertion requires allowing **Sonicloud Voice** under **System Settings → Privacy & Security → Accessibility**. Recognition and copying still work without this permission. Insertion temporarily uses the clipboard, then restores its previous contents while preserving anything newly copied in the meantime.
 
+On Windows, recognized text is typed live into the focused field character by character through the typer injection library, with automatic corrections while you speak; translation types only the final translated text. Character injection never touches the clipboard. Password fields and windows that reject simulated input (for example, elevated apps) keep the result available to copy instead.
+
 ### Using the AI button
 
-Holding the AI button brings Harness to the foreground. If you are on an AI conversation page, it uses that conversation; otherwise, it creates one. You do not need to focus the input field. Recognized text is appended to the existing draft.
+Holding the AI button brings Harness to the foreground, even when it is minimized or hidden in the tray. If you are on an AI conversation page, it uses that conversation; otherwise, it creates one. You do not need to focus the input field. Recognized text is appended to the existing draft.
 
-With **Auto-send (自动发送)** enabled, the complete draft and attachments are submitted. Turn it off to review and send the text manually. This setting is saved per mouse, and each recording uses the setting captured when the button was pressed. If you switch pages or conversations during recording, the result still goes to the captured conversation. If activation, conversation creation, or insertion fails, the overlay keeps the result available to copy.
+With **Auto-send (自动发送)** enabled, the complete draft and attachments are submitted. Turn it off to review and send the text manually. This setting is saved per mouse, and each recording uses the setting captured when the button was pressed. If you switch pages or conversations during recording, the result still goes to the captured conversation. If conversation creation or insertion fails, the overlay keeps the result available to copy; on Windows it also shows a one-click submit button — open the target input and click it to type the text into the focused field.
 
 ### Search and Open Link
 
