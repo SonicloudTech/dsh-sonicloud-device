@@ -68,10 +68,7 @@ export function releaseNotes(zh, en, version, branch) {
   const chinese = parseChangelog(zh, 'zh'), english = parseChangelog(en, 'en');
   const structure = sections => sections.map(({ body, ...section }) => section);
   assert.deepEqual(structure(chinese), structure(english), '中英文更新日志版本、日期、分类或条目数量不一致');
-  // main 无对应版本章节时回退采用未发布章节，dev 直接合并即可发布；已撤回的版本章节不回退。
-  const wanted = branch === 'dev' || !chinese.some(section => section.version === version)
-    ? 'Unreleased' : version;
-  const selected = chinese.find(section => section.version === wanted);
+  const selected = chinese.find(section => section.version === (branch === 'dev' ? 'Unreleased' : version));
   assert.ok(selected && !selected.yanked && selected.groups.some(group => group.entries), '缺少本次变更说明或版本已撤回');
   return selected.body;
 }

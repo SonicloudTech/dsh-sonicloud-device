@@ -39,8 +39,7 @@ test('双语日志核对全部章节、日期、分类与条目数量并选择�
     en.replace('- English fix', '- First\n- Second'), en.replace('## Unreleased', '## Pending'),
     en.replace('2026-11-09', '2026-02-30')]) assert.throws(() => releaseNotes(zh, changed, '0.1.0', 'main'));
   assert.throws(() => releaseNotes(...logs('', ''), '0.1.0', 'dev'));
-  assert.match(releaseNotes(zh, en, '0.2.0', 'main'), /中文变更/);
-  assert.throws(() => releaseNotes(...logs('', ''), '0.2.0', 'main'));
+  assert.throws(() => releaseNotes(zh, en, '0.2.0', 'main'));
   assert.throws(() => releaseNotes(zh.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [已撤回]'),
     en.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [YANKED]'), '0.1.0', 'main'));
 });
