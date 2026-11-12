@@ -39,9 +39,22 @@ test('双语日志核对全部章节、日期、分类与条目数量并选择�
     en.replace('- English fix', '- First\n- Second'), en.replace('## Unreleased', '## Pending'),
     en.replace('2026-11-09', '2026-02-30')]) assert.throws(() => releaseNotes(zh, changed, '0.1.0', 'main'));
   assert.throws(() => releaseNotes(...logs('', ''), '0.1.0', 'dev'));
-  assert.throws(() => releaseNotes(zh, en, '0.2.0', 'main'));
+  assert.match(releaseNotes(zh, en, '0.2.0', 'main'), /中文变更/);
+  assert.throws(() => releaseNotes(...logs('', ''), '0.2.0', 'main'));
   assert.throws(() => releaseNotes(zh.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [已撤回]'),
     en.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [YANKED]'), '0.1.0', 'main'));
+});
+
+test('完全折叠的更新日志在 main 采用版本章节，dev 仍要求未发布章节', () => {
+  const [zh, en] = logs();
+  const foldedZh = zh.replace('## 未发布\n\n### 新增\n- 中文变更\n\n', '');
+  const foldedEn = en.replace('## Unreleased\n\n### Added\n- English change\n\n', '');
+  assert.match(releaseNotes(foldedZh, foldedEn, '0.1.0', 'main'), /中文修复/);
+  assert.throws(() => releaseNotes(foldedZh, foldedEn, '0.1.0', 'dev'), /缺少本次变更说明/);
+  assert.throws(() => releaseNotes(foldedZh, foldedEn, '0.2.0', 'main'), /缺少本次变更说明/);
+  const swappedZh = zh.replace('## 未发布\n\n### 新增\n- 中文变更\n\n## 0.1.0 - 2026-11-09',
+    '## 0.1.0 - 2026-11-09\n\n### 修复\n- 临时条目\n\n## 未发布\n\n### 新增\n- 中文变更\n\n## 0.0.9 - 2026-11-08');
+  assert.throws(() => releaseNotes(swappedZh, en, '0.1.0', 'main'), /未发布章节必须置顶/);
 });
 
 test('新版本可发布，重复版本只能使用同次运行且完整性一致的恢复记录', () => {
