@@ -16,6 +16,7 @@
 - Streamline specifications and development docs, consolidating CI/CD configuration and release verification records.
 - Standardize on npm and remove outdated pnpm lockfile and configuration.
 - Relax release-notes rules: publishing falls back to the Unreleased section when the changelog has no section for the current version, so merging dev directly can ship.
+- Accept fully folded changelogs in release checks: an Unreleased section must stay at the top when present, and a fully folded changelog (version sections only) publishes from the current version section.
 
 ## 0.1.1 - 2026-11-09
 

@@ -57,7 +57,8 @@ export function parseChangelog(text, language) {
     assert.ok(!sections.some(item => item.version === version), '更新日志版本重复');
     sections.push({ version, date: release?.[2] ?? null, yanked: Boolean(release?.[3]), groups, body: body.trim() });
   }
-  assert.equal(sections[0]?.version, 'Unreleased', '顶部须保留未发布章节');
+  if (sections.some(section => section.version === 'Unreleased'))
+    assert.equal(sections[0]?.version, 'Unreleased', '未发布章节必须置顶');
   for (let i = 2; i < sections.length; i++) {
     assert.ok(compareVersions(sections[i - 1].version, sections[i].version) > 0, '已发布版本须按倒序排列');
   }
