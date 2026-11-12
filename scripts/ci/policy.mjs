@@ -110,7 +110,7 @@ export function publicationDecision(metadata, version, record, context) {
 }
 
 export const requiredFiles = [
-  'package.json', 'LICENSE', 'README.md', 'CHANGELOG.md', 'CHANGELOG.zh.md', 'cordis.patch.yml',
+  'package.json', 'LICENSE', 'README.md', 'README.zh.md', 'CHANGELOG.md', 'CHANGELOG.zh.md', 'cordis.patch.yml',
   'dist/client.js', 'dist/build.json', 'src/host/index.mjs', 'src/devices/native.mjs',
   'src/devices/native-worker.mjs', 'src/asr/config.mjs', 'src/desktop/presentation.mjs',
   'native/THIRD_PARTY_LICENSES.txt', 'native/COPYING.LGPLv2.1', 'native/LICENSE.hidapi-bsd',
@@ -128,7 +128,7 @@ export function validateFileList(files) {
   for (const path of paths) {
     assert.ok(!path.split('/').some(part => part.startsWith('.') || ['node_modules', 'work', 'tests', 'scripts', 'generations'].includes(part)), `安装包含不允许的路径：${path}`);
     assert.ok(!/[\\\r\n]/.test(path) && !path.startsWith('/'), '安装包路径无效');
-    assert.ok(/^(?:src\/(?:asr|host|shared|devices|desktop|client\/assets)\/|native\/|docs\/|dist\/(?:client\.js|build\.json)$|(?:package\.json|cordis\.patch\.yml|README\.md|CHANGELOG(?:\.zh)?\.md|LICENSE)$)/.test(path), `安装包含非发布文件：${path}`);
+    assert.ok(/^(?:src\/(?:asr|host|shared|devices|desktop|client\/assets)\/|native\/|docs\/|dist\/(?:client\.js|build\.json)$|(?:package\.json|cordis\.patch\.yml|README(?:\.zh)?\.md|CHANGELOG(?:\.zh)?\.md|LICENSE)$)/.test(path), `安装包含非发布文件：${path}`);
     assert.ok(!/\.(?:pem|key|p12|pfx|tgz|log|map)$/i.test(path), `安装包含敏感或临时文件：${path}`);
   }
 }

@@ -61,11 +61,27 @@ test('built client hides shared services, edits per-device preferences, and disp
     if (name === '@deepseek-ai/dsh-client-ui-primitives') return { Button, Modal, Menu, Switch, Input, IconChevronDownOutlineRegular, Toast, IconWarningOutlineRegular };
     throw new Error(`Unexpected browser dependency ${name}`);
   });
-  const scope = {
-    remote: { asr: api },
-    effect: factory => { cleanups.push(factory()); },
-    slots: { inject: (name, fn) => fn(), register: (options, component) => { registrations.set(options.name, { options, component }); } },
+  const record = (options, component) => {
+    const key = options.name + (options.key !== undefined ? ':' + options.key : '');
+    registrations.set(key, { options, component });
+    return () => registrations.delete(key);
   };
+  const makeScope = () => {
+    const scope = {
+      remote: { asr: api },
+      effect: factory => { cleanups.push(factory()); },
+      slots: { inject: (name, fn) => fn(), register: record },
+      inject: (services, callback) => {
+        const teardowns = [];
+        callback({
+          slots: { inject: (name, fn) => { teardowns.push(fn()); }, register: record },
+        });
+        return { dispose: () => { for (const teardown of teardowns.splice(0).reverse()) teardown?.(); } };
+      },
+    };
+    return scope;
+  };
+  const scope = makeScope();
   const ctx = {
     remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 8); return () => { remoteDisposed = true; }; } },
     inject: (services, callback) => { callback(scope); return { dispose: async () => { for (const cleanup of cleanups) await cleanup(); } }; },
@@ -73,6 +89,12 @@ test('built client hides shared services, edits per-device preferences, and disp
   const dispose = await plugin.apply(ctx);
   const settings = registrations.get('settings.section');
   assert.equal(settings.options.label(), '声云设备'); assert.equal(registrations.get('conversation.input.overlay').options.id, 'dsh-sonicloud-device-ai-target');
+  const panelRow = registrations.get('sidebar.panellist');
+  const mainPanel = registrations.get('main:dsh-sonicloud-device-panel');
+  assert.equal(panelRow.options.id, 'dsh-sonicloud-device-panel');
+  assert.equal(panelRow.options.label(), '声云设备');
+  assert.equal(mainPanel.options.key, 'dsh-sonicloud-device-panel');
+  assert.equal(mainPanel.component.displayName ?? mainPanel.component.name, 'DevicesPanel');
   assert.equal(dom.window.document.querySelector('.dsh-mouse-status'), null);
   const root = createRoot(dom.window.document.getElementById('root'));
   const overlay = registrations.get('shell.overlay');
@@ -83,6 +105,29 @@ test('built client hides shared services, edits per-device preferences, and disp
     await act(async () => root.render(React.createElement(settings.component, { ...settings.options.inject() })));
     assert.match(dom.window.document.body.textContent, /暂无设备连接/);
     assert.doesNotMatch(dom.window.document.body.textContent, /共享语音服务|语音服务 ·|声云 ASR|添加 ASR 服务/);
+    const sidebarSwitch = () => dom.window.document.querySelector('[aria-label="侧边栏"]');
+    assert.equal(sidebarSwitch().getAttribute('aria-checked'), 'true');
+    await act(async () => sidebarSwitch().click());
+    assert.equal(sidebarSwitch().getAttribute('aria-checked'), 'false');
+    assert.equal(registrations.get('sidebar.panellist'), undefined);
+    assert.equal(registrations.get('main:dsh-sonicloud-device-panel'), undefined);
+    await act(async () => sidebarSwitch().click());
+    assert.equal(sidebarSwitch().getAttribute('aria-checked'), 'true');
+    assert.equal(registrations.get('sidebar.panellist').options.id, 'dsh-sonicloud-device-panel');
+    assert.equal(registrations.get('main:dsh-sonicloud-device-panel').options.key, 'dsh-sonicloud-device-panel');
+    const panelNode = dom.window.document.createElement('div');
+    dom.window.document.body.append(panelNode);
+    const panelRoot = createRoot(panelNode);
+    try {
+      const mounted = registrations.get('main:dsh-sonicloud-device-panel');
+      await act(async () => panelRoot.render(React.createElement(mounted.component, { ...mounted.options.inject() })));
+      assert.ok(dom.window.document.querySelector('.dsh-mouse-panel'));
+      assert.match(dom.window.document.body.textContent, /侧边栏/);
+      await act(async () => dom.window.document.querySelector('.dsh-mouse-panel [aria-label="侧边栏"]').click());
+      assert.equal(registrations.get('sidebar.panellist'), undefined);
+      await act(async () => sidebarSwitch().click()); // 从设置页恢复显示
+      assert.equal(registrations.get('sidebar.panellist').options.id, 'dsh-sonicloud-device-panel');
+    } finally { await act(async () => panelRoot.unmount()); }
     assert.equal(dom.window.document.querySelector('.dsh-mouse-services'), null);
     assert.equal(catalogCalls, 0);
     assert.doesNotMatch(await readFile('dist/client.js', 'utf8'), /getUserMedia|bindLongPress|AudioWorklet/);

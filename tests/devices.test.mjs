@@ -63,6 +63,51 @@ test('legacy preferences enable AI auto-send and explicit false survives storage
   assert.equal((await store.get('0002')).preferences.aiAutoSend, true);
   await assert.rejects(store.save('0001', 4, { ...loaded.preferences, aiAutoSend: 'false' }));
 });
+test('temporary identities restore saved preferences and reject conflicting device information', async () => {
+  const s = await fixture();
+  try {
+    const saved = await s.manager.store.save('0001', 0, { ...defaultPreferences(), punctuation: false });
+    await s.connect('usb-temporary');
+    await s.key('usb-temporary', 'down');
+    assert.equal(s.manager.run, undefined);
+    await s.send({ type: 'message', id: 'usb-temporary', message: { type: 'deviceInfo', sn: '0001', battery: 75 } });
+    const device = s.manager.view().devices[0];
+    assert.equal(device.id, 'usb-temporary');
+    assert.equal(device.sn, '0001');
+    assert.equal(device.identityConfirmed, true);
+    assert.equal(device.battery, 75);
+    assert.deepEqual(device.preferences, saved.preferences);
+    await s.key('usb-temporary', 'down');
+    assert.equal(s.manager.run.sn, '0001');
+    await s.connect('0002');
+    await s.send({ type: 'message', id: 'usb-temporary', message: { type: 'deviceInfo', sn: '0002', battery: 101 } });
+    await until(() => !s.manager.run);
+    const devices = s.manager.view().devices;
+    assert.equal(devices.length, 2);
+    assert.equal(devices[0].sn, '0001');
+    assert.equal(devices[0].identityConfirmed, false);
+    assert.equal(devices[0].battery, 75);
+    assert.equal(devices[1].identityConfirmed, true);
+    assert.deepEqual((await s.manager.store.get('0001')).preferences, saved.preferences);
+    assert.ok(s.events.some(event => event.type === 'failed' && /SN 冲突/.test(event.message)));
+  } finally { await s.stop(); }
+});
+test('unregistered SDK warnings are delivered and queue overflow cancels the active session', async () => {
+  const s = await fixture();
+  try {
+    await s.connect('0001', 1);
+    await s.send({ type: 'disconnected', id: '0001', mode: 0 });
+    assert.equal(s.manager.view().devices.length, 1);
+    await s.key('0001', 'down');
+    await s.send({ type: 'message', id: 'unknown', message: { type: 'warning', text: 'SDK 警告' } });
+    assert.ok(s.manager.run);
+    assert.ok(s.events.some(event => event.type === 'notice' && event.message === 'SDK 警告'));
+    await s.send({ type: 'message', id: 'unknown', message: { type: 'queueOverflow' } });
+    await until(() => !s.manager.run);
+    assert.ok(s.events.some(event => event.type === 'failed' && /音频丢失/.test(event.message)));
+    assert.deepEqual(s.sdk.sources, ['0001', '']);
+  } finally { await s.stop(); }
+});
 test('two devices share one session; B audio, key release and disconnect never complete A', async () => {
   const s = await fixture();
   try {
@@ -345,6 +390,23 @@ test('URL and OS actions do not interpolate user input into shell commands', asy
   await assert.rejects(systemAction('openUrl', 'file:///etc/passwd', { platform: 'darwin', execute }));
   await systemAction('backspace', undefined, { platform: 'darwin', execute });
   assert.match(calls[1][1][1], /key code 51/);
+});
+
+test('openAi on Windows restores the window, strips node-mode env and falls back to a second launch', async () => {
+  const calls = [];
+  await systemAction('openAi', undefined, { platform: 'win32', execute: async (...args) => calls.push(args) });
+  const [file, args] = calls.at(-1);
+  assert.equal(file, 'powershell.exe');
+  const script = Buffer.from(args.at(-1), 'base64').toString('utf16le');
+  // AppActivate never restores a minimized window; the fast path needs ShowWindow(SW_RESTORE) + foreground.
+  assert.match(script, /ShowWindow\(\$p\.MainWindowHandle, 9\)/);
+  assert.match(script, /SetForegroundWindow/);
+  // The plugin backend runs the app exe as node (ELECTRON_RUN_AS_NODE); a second launch must not inherit that.
+  assert.match(script, /Remove-Item Env:\\ELECTRON_RUN_AS_NODE/);
+  assert.ok(script.indexOf('Remove-Item Env:') < script.indexOf("Start-Process -FilePath $exe"), 'env must be cleaned before launching');
+  assert.ok(script.indexOf("Start-Process -FilePath $exe") < script.indexOf('rundll32.exe'), 'direct exe launch takes priority');
+  assert.match(script, /'dsh:\/\/open'/);
+  assert.doesNotMatch(script, /exit 1/);
 });
 
 test('URLs allow omitted protocols without rewriting input, storage or browser arguments', async () => {

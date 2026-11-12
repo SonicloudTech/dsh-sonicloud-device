@@ -62,14 +62,23 @@ function DeviceForm({ device, controller, state }) {
     </div>
   </div>;
 }
-export function Devices({ controller }) {
+// 未传显隐偏好时使用的稳定兜底，避免条件调用 Hook。
+const NO_SIDEBAR = { sidebarVisible: true };
+const subscribeNone = () => () => {};
+
+export function Devices({ controller, sidebar }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
+  const { sidebarVisible } = useSyncExternalStore(sidebar?.subscribe ?? subscribeNone, sidebar?.snapshot ?? (() => NO_SIDEBAR));
   const [selected, setSelected] = useState(null);
   const devices = state.devices, device = devices.find(item => item.id === selected) ?? devices[0];
   const index = device ? devices.indexOf(device) : 0;
   const count = new Set(devices.filter(item => item.identityConfirmed).map(item => item.sn)).size;
   return <section className="dsh-mouse-settings" aria-label="声云设备">
-    <h2>声云设备</h2><p className="dsh-asr-intro">{count} 台设备已连接 · 为每台设备设置专属偏好</p>
+    <header className="dsh-mouse-head">
+      <h2>声云设备</h2>
+      {sidebar && <span className="dsh-mouse-switch"><span>侧边栏</span><Switch label="侧边栏" checked={sidebarVisible} onChange={value => sidebar.setVisible(value)} /></span>}
+    </header>
+    <p className="dsh-asr-intro">{count} 台设备已连接 · 为每台设备设置专属偏好</p>
     {!device ? <div className="dsh-mouse-empty"><span aria-hidden="true">⌁</span><h3>暂无设备连接</h3><p>请连接智能鼠标的 USB 接收器，或通过蓝牙连接鼠标。</p><p className="dsh-asr-muted">{state.status}</p></div> : <>
       <div className="dsh-mouse-carousel">
         {devices.length > 1 && <button type="button" aria-label="上一台设备" onClick={() => setSelected(devices[(index + devices.length - 1) % devices.length].id)}>‹</button>}
@@ -83,4 +92,9 @@ export function Devices({ controller }) {
       {device.type === 'smart-mouse' ? <DeviceForm key={device.id} device={device} controller={controller} state={state} /> : <p>此设备类型暂未提供专属设置。</p>}
     </>}
   </section>;
+}
+
+// main 全局面板包装：约束内容宽度并预留窗口顶部安全距离，对齐宿主入口页规范。
+export function DevicesPanel(props) {
+  return <div className="dsh-mouse-panel"><Devices {...props} /></div>;
 }

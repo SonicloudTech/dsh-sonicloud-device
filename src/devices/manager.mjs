@@ -74,59 +74,73 @@ export class DeviceManager {
   }
   async event(event) {
     if (this.disposed) return;
-    const id = event.id;
-    if (event.type === 'diagnostic') {
-      if (!this.devices.size) { this.status = event.message; this.snapshot(); }
-    } else if (event.type === 'connected') {
-      const previous = this.devices.get(id);
-      if (previous) this.cancelFor(id);
-      const stable = isStableSn(id);
-      const category = event.deviceType ?? 'smart-mouse';
-      const saved = stable && category === 'smart-mouse' ? await this.store.get(id) : null;
-      this.devices.set(id, { id, sn: stable ? id : '', type: category, name: event.name || (category === 'smart-mouse' ? '智能鼠标' : '设备'),
-        connection: event.mode === 1 ? 'ble' : 'usb', connectionId: randomUUID(), battery: null,
-        identityConfirmed: stable, dpiState: 'unknown', ...saved });
-      this.clearPressed(id);
-      this.status = '设备已连接';
-      if (saved?.revision > 0) await this.applyDpi(this.devices.get(id));
-      this.snapshot();
-    } else if (event.type === 'disconnected') {
-      const device = this.devices.get(id);
-      if (!device || device.connection !== (event.mode === 1 ? 'ble' : 'usb')) return;
-      this.cancelFor(id, '设备已断开，语音已取消'); this.devices.delete(id); this.clearPressed(id);
-      if (!this.devices.size) this.status = '设备已断开，正在重新查找智能鼠标…';
-      this.snapshot();
-    } else if (event.type === 'overflow') this.cancelFor(id, '鼠标音频处理过慢，本次识别已停止');
-    else if (event.type === 'warning') this.publish({ type: 'notice', message: event.message });
-    else if (event.type === 'message') {
-      const device = this.devices.get(id), message = event.message;
-      if (message.type === 'warning') { this.publish({ type: 'notice', message: message.text || '鼠标连接异常' }); return; }
-      if (message.type === 'queueOverflow') { this.cancel(undefined, '鼠标音频丢失，请重新录音'); return; }
-      if (!device) return;
-      if (message.type === 'deviceInfo') {
-        if (isStableSn(message.sn) && message.sn !== device.sn) {
-          // Re-key only a temporary identity, never merge two real devices.
-          if (device.identityConfirmed || this.devices.has(message.sn)) {
-            device.identityConfirmed = false; this.cancelFor(id, '设备 SN 冲突，请重连');
-          } else {
-            this.devices.delete(id); device.sn = message.sn; device.identityConfirmed = true;
-            if (device.type === 'smart-mouse') Object.assign(device, await this.store.get(message.sn)); this.devices.set(id, device);
-          }
-        }
-        if (Number.isFinite(message.battery) && message.battery >= 0 && message.battery <= 100) device.battery = message.battery;
-        this.snapshot();
-      } else if (message.type === 'dpiChanged') {
-        if (!Number.isInteger(message.level) || message.level < 0 || message.level > 255) return;
-        device.dpiRaw = message.level;
-        // Hardware broadcasts use a separate mapping from software command bytes.
-        const matches = Object.entries(this.dpiReportLevels).filter(([, level]) => level === message.level);
-        if (matches.length === 1 && device.type === 'smart-mouse' && device.identityConfirmed) {
-          Object.assign(device, await this.store.reportDpi(device.sn, matches[0][0]));
-          device.dpiState = 'reported';
-        } else if (device.dpiState === 'reported') device.dpiState = 'unknown';
-        this.snapshot();
-      } else if (message.type === 'keyEvent') await this.key(device, message);
+    switch (event.type) {
+      case 'connected': return this.connectDevice(event);
+      case 'disconnected': return this.disconnectDevice(event);
+      case 'message': return this.deviceMessage(event);
+      case 'overflow': return this.cancelFor(event.id, '鼠标音频处理过慢，本次识别已停止');
+      case 'warning': return this.publish({ type: 'notice', message: event.message });
+      case 'diagnostic':
+        if (!this.devices.size) { this.status = event.message; this.snapshot(); }
     }
+  }
+  async connectDevice(event) {
+    const { id } = event;
+    if (this.devices.has(id)) this.cancelFor(id);
+    const stable = isStableSn(id);
+    const category = event.deviceType ?? 'smart-mouse';
+    const saved = stable && category === 'smart-mouse' ? await this.store.get(id) : null;
+    const device = { id, sn: stable ? id : '', type: category, name: event.name || (category === 'smart-mouse' ? '智能鼠标' : '设备'),
+      connection: event.mode === 1 ? 'ble' : 'usb', connectionId: randomUUID(), battery: null,
+      identityConfirmed: stable, dpiState: 'unknown', ...saved };
+    this.devices.set(id, device);
+    this.clearPressed(id);
+    this.status = '设备已连接';
+    if (saved?.revision > 0) await this.applyDpi(device);
+    this.snapshot();
+  }
+  disconnectDevice({ id, mode }) {
+    const device = this.devices.get(id);
+    if (!device || device.connection !== (mode === 1 ? 'ble' : 'usb')) return;
+    this.cancelFor(id, '设备已断开，语音已取消'); this.devices.delete(id); this.clearPressed(id);
+    if (!this.devices.size) this.status = '设备已断开，正在重新查找智能鼠标…';
+    this.snapshot();
+  }
+  async deviceMessage({ id, message }) {
+    const device = this.devices.get(id);
+    if (message.type === 'warning') { this.publish({ type: 'notice', message: message.text || '鼠标连接异常' }); return; }
+    if (message.type === 'queueOverflow') { this.cancel(undefined, '鼠标音频丢失，请重新录音'); return; }
+    if (!device) return;
+    switch (message.type) {
+      case 'deviceInfo': return this.updateDeviceInfo(device, message);
+      case 'dpiChanged': return this.reportDpi(device, message.level);
+      case 'keyEvent': return this.key(device, message);
+    }
+  }
+  async updateDeviceInfo(device, message) {
+    if (isStableSn(message.sn) && message.sn !== device.sn) {
+      // 只补全临时身份，不合并已确认的设备。
+      if (device.identityConfirmed || this.devices.has(message.sn)) {
+        device.identityConfirmed = false; this.cancelFor(device.id, '设备 SN 冲突，请重连');
+      } else {
+        this.devices.delete(device.id); device.sn = message.sn; device.identityConfirmed = true;
+        if (device.type === 'smart-mouse') Object.assign(device, await this.store.get(message.sn));
+        this.devices.set(device.id, device);
+      }
+    }
+    if (Number.isFinite(message.battery) && message.battery >= 0 && message.battery <= 100) device.battery = message.battery;
+    this.snapshot();
+  }
+  async reportDpi(device, level) {
+    if (!Number.isInteger(level) || level < 0 || level > 255) return;
+    device.dpiRaw = level;
+    // 硬件上报映射与软件下发字节独立。
+    const matches = Object.entries(this.dpiReportLevels).filter(([, value]) => value === level);
+    if (matches.length === 1 && device.type === 'smart-mouse' && device.identityConfirmed) {
+      Object.assign(device, await this.store.reportDpi(device.sn, matches[0][0]));
+      device.dpiState = 'reported';
+    } else if (device.dpiState === 'reported') device.dpiState = 'unknown';
+    this.snapshot();
   }
   clearPressed(id) { for (const key of this.pressed.keys()) if (key.startsWith(id + ':')) this.pressed.delete(key); }
   save(sn, revision, preferences) {
@@ -198,7 +212,8 @@ export class DeviceManager {
   async prepareAi(run) {
     try {
       if (!this.aiConversation || !this.desktop) throw new Error('AI 对话功能不可用，请重新加载插件');
-      await this.action('openAi');
+      // Activation failure alone must not abort: with the window tray-hidden the renderer lives on and insertion still works.
+      try { await this.action('openAi'); } catch { run.aiActivateFailed = true; }
       run.lifetime.signal.throwIfAborted();
       await this.aiConversation.prepare(run);
       return {};
@@ -271,35 +286,50 @@ export class DeviceManager {
       }
       if (this.run !== run || run.closing) return;
       if (!complete || !run.released) throw new Error('ASR 连接中断，识别结果未完成');
-      let text = formatTranscript(run.transcript.finalText(), run.preferences, run.action);
-      if (!text.trim()) {
-        this.publish({ type: 'finished', sessionId: run.id });
-        await this.finish(run);
-        return;
-      }
-      if (run.action === 'translate') {
-        this.publish({ type: 'phase', sessionId: run.id, phase: 'translating' });
-        text = await this.translate({ sn: run.sn, service: run.service, text, from: run.preferences.from, to: run.preferences.to, signal: run.lifetime.signal, config: this.config.translation });
-      }
+      await this.complete(run);
+    } catch (error) { this.fail(run, error.message || '语音处理失败，请重试'); }
+  }
+  async complete(run) {
+    let text = formatTranscript(run.transcript.finalText(), run.preferences, run.action);
+    if (!text.trim()) {
+      this.publish({ type: 'finished', sessionId: run.id });
+      await this.finish(run);
+      return;
+    }
+    if (run.action === 'translate') {
+      this.publish({ type: 'phase', sessionId: run.id, phase: 'translating' });
+      text = await this.translate({ sn: run.sn, service: run.service, text, from: run.preferences.from, to: run.preferences.to, signal: run.lifetime.signal, config: this.config.translation });
+    }
+    if (this.run !== run || run.closing) return;
+    if (run.action === 'ai_input') {
+      const prepared = await run.aiReady;
       if (this.run !== run || run.closing) return;
-      if (run.action === 'ai_input') {
-        const prepared = await run.aiReady;
-        if (this.run !== run || run.closing) return;
-        // Keep the complete text available in the native panel if target preparation/insertion fails.
-        this.publish({ type: 'preview', sessionId: run.id, text });
+      // Keep the complete text available in the native panel if target preparation/insertion fails.
+      this.publish({ type: 'preview', sessionId: run.id, text });
+      try {
         if (prepared.error) throw prepared.error;
         await this.aiConversation.insert(run, text);
         if (this.run !== run || run.closing) return;
-        this.publish({ type: 'finished', sessionId: run.id });
-      } else if (run.action === 'speechSearch') {
-        await this.action('openUrl', searchAddress(run.preferences.searchUrl, text));
-        if (this.run !== run || run.closing) return;
-        this.publish({ type: 'finished', sessionId: run.id });
-      } else if (this.desktop) {
-        await this.desktop.complete(run, text);
-      } else this.publish({ type: 'result', sessionId: run.id, text });
-      await this.finish(run);
-    } catch (error) { this.fail(run, error.message || '语音处理失败，请重试'); }
+        this.publish(run.aiActivateFailed
+          ? { type: 'failed', sessionId: run.id, message: '窗口未唤起，文字已填入对话草稿，可复制结果' }
+          : { type: 'finished', sessionId: run.id });
+      } catch (error) {
+        // On Windows the panel keeps the text so the user can focus any input and submit it there.
+        if (this.desktop?.platform === 'win32') {
+          this.publish({ type: 'submitOffer', sessionId: run.id, text, message: '请打开需要输入界面' });
+          await this.finish(run);
+          return;
+        }
+        throw error;
+      }
+    } else if (run.action === 'speechSearch') {
+      await this.action('openUrl', searchAddress(run.preferences.searchUrl, text));
+      if (this.run !== run || run.closing) return;
+      this.publish({ type: 'finished', sessionId: run.id });
+    } else if (this.desktop) {
+      await this.desktop.complete(run, text);
+    } else this.publish({ type: 'result', sessionId: run.id, text });
+    await this.finish(run);
   }
   fail(run, message) {
     if (this.run !== run || run.closing) return;
