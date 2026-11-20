@@ -6,6 +6,23 @@
 
 - Check macOS typing and screenshot permissions on initial activation and reconnection, with separate Sonicloud Voice and screenhelper authorization and recheck guidance in Sonicloud Devices; system permission confirmation remains manual.
 - Integrate standalone screenshot processes for Windows x64 and macOS ARM64, triggered by the mouse capture button or Start Screenshot in Sonicloud Devices, with region selection, annotation, copying, saving, pinning, and scrolling capture; report repeated triggers and startup failures, and close capture and pinned windows when the plugin is disabled.
+
+### Changed
+
+- Sign macOS Sonicloud Voice with a Developer ID; existing Accessibility grants from older versions may need to be confirmed again as prompted by the system.
+- Move the screenshot controls to the bottom of the Sonicloud Devices page.
+
+### Fixed
+
+- Check macOS Screen Recording permission in both the host and native screenshot process before showing the overlay, preventing it from covering system permission prompts; missing Accessibility permission does not block regular screenshots or manual scrolling.
+- Restore macOS voice helper execution permissions lost during cross-platform packaging so packages built on Windows can start Sonicloud Voice.
+- Hide unsupported image translation and scrolling OCR/Word export actions in both Windows and macOS screenshot processes while keeping scrolling capture available; retain the original Developer ID identity for the macOS package.
+- Parse Windows tar line endings correctly during package checks so complete packages are not reported as missing files.
+
+## 0.1.2 - 2026-11-12
+
+### Added
+
 - Add a Sonicloud Devices panel to the left navigation bar with the same device management UI as the settings page; shown by default, with a settings-page switch to hide or restore it without affecting the settings page.
 - Switch Windows voice typing and translation to the typer injection library: text is typed live into the focused window character by character while speaking, with automatic backspace corrections, and finalized on release; translation types only the final translated text. Character injection never reads from or writes to the clipboard; password fields, a missing library, or rejected injection (for example, elevated windows) keep the result available to copy.
 - Restore the Harness window for the AI button on Windows: activation now restores minimized windows directly, and for tray-hidden windows launches a second instance of the running app (stripping node-mode Electron environment overrides) handled by its single-instance handler; an activation failure alone no longer blocks filling the conversation draft.
