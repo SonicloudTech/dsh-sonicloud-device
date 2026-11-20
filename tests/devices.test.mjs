@@ -38,6 +38,65 @@ async function fixture(overrides = {}) {
   const stop = async () => { life.abort(); await watching; await manager.close(); };
   return { manager, sdk, credentials, events, audio, actions, send, key, connect, stop };
 }
+
+test('截图键兼容独立 click 和 down/click/up，后台触发且不进入语音流程', async () => {
+  const screenshot = new EventEmitter(), calls = [];
+  screenshot.capture = async trigger => { calls.push(trigger); return true; };
+  screenshot.close = async () => {};
+  const s = await fixture({ screenshot, prepare: () => assert.fail('截图不能请求语音凭据') });
+  try {
+    await s.connect('0001');
+    s.manager.owner = undefined;
+    await s.key('0001', 'click', 'capture');
+    await s.key('0001', 'click', 'capture');
+    assert.deepEqual(calls, ['mouse', 'mouse']);
+    for (const action of ['down', 'down', 'hold', 'click', 'up', 'click']) await s.key('0001', action, 'capture');
+    assert.equal(calls.length, 3);
+    await s.key('0001', 'down', 'capture');
+    assert.equal(calls.length, 4);
+    assert.equal(s.manager.run, undefined);
+    assert.deepEqual(s.sdk.sources, []);
+    await s.send({ type: 'disconnected', id: '0001', mode: 0 });
+    await s.connect('0001');
+    await s.key('0001', 'down', 'capture');
+    assert.equal(calls.length, 5);
+  } finally { await s.stop(); }
+});
+
+test('截图失败及 helper 异步错误提示不终止语音，关闭后解除事件并释放服务', async () => {
+  const screenshot = new EventEmitter(); let closed = 0;
+  screenshot.capture = async () => { throw new Error('截图正在进行，请稍后重试'); };
+  screenshot.close = async () => { closed++; };
+  const s = await fixture({ screenshot });
+  try {
+    await s.connect('0001');
+    await s.key('0001', 'down');
+    const run = s.manager.run;
+    await s.key('0001', 'click', 'capture');
+    await until(() => s.events.some(event => /截图正在进行/.test(event.message)));
+    screenshot.emit('notice', '请授予屏幕录制权限');
+    await until(() => s.events.some(event => /屏幕录制/.test(event.message)));
+    assert.equal(s.manager.run, run);
+    assert.equal(run.closing, undefined);
+  } finally { await s.stop(); }
+  assert.equal(closed, 1);
+  assert.equal(screenshot.listenerCount('notice'), 0);
+  await assert.rejects(s.manager.captureScreenshot(), /插件已关闭/);
+});
+
+test('界面截图无需连接鼠标或占有语音会话', async () => {
+  const screenshot = new EventEmitter(), calls = [];
+  screenshot.capture = async trigger => { calls.push(trigger); return true; };
+  screenshot.close = async () => {};
+  const s = await fixture({ screenshot });
+  try {
+    s.manager.owner = undefined;
+    assert.equal(await s.manager.captureScreenshot(), true);
+    assert.deepEqual(calls, ['ui']);
+    assert.equal(s.manager.devices.size, 0);
+    assert.deepEqual(s.sdk.sources, []);
+  } finally { await s.stop(); }
+});
 test('SN preferences isolate devices, survive reconnect, reject stale writes and do not overwrite ASR credentials', async () => {
   const credentials = new MemoryCredentials(), store = new DeviceStore(credentials), services = new ServiceStore(credentials);
   const before = await services.catalog();

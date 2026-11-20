@@ -1,0 +1,16 @@
+{
+  "platform": "darwin-arm64",
+  "source": "VoicePanel.swift",
+  "sourceSha256": "973e8283174f65b08363d1df6081eaa30c63b9b2e3a4879ec69885ffb2210612",
+  "policy": "CompatibilityPolicy.swift",
+  "policySha256": "70a2427f52f61c061c2a41ed9f33030d25842cb7e65ee8d1cda3fa47527f3e5e",
+  "binary": "darwin-arm64/Sonicloud Voice.app/Contents/MacOS/sonicloud-voice",
+  "binarySha256": "c9584df2b7139bb80c741c4bae32ad977191ba756cd6cbeccd848e266b809329",
+  "bundleId": "com.sonicloud.voice-panel",
+  "teamId": "F3TYM6YPF7",
+  "codesignVerified": true,
+  "permissions": [
+    "accessibility"
+  ],
+  "previousSignature": "ad-hoc"
+}

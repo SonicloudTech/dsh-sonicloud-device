@@ -13,3 +13,7 @@
 ## 桌面语音组件
 
 `desktop/` 是本项目维护的原生浮层及输入框回填实现，不属于上游鼠标 SDK。macOS ARM64 可执行文件由同目录 Swift 源码构建；Windows 源码由系统 PowerShell 加载。构建、权限和验证范围见[开发说明](../docs/contributing/development.md#桌面语音浮层)。
+
+## 截图组件
+
+`screenshot/` 随包提供 ScreenTool 1.2.2 客户端与独立截图进程，支持 Windows x64 和 macOS ARM64。来源、部署与权限见[截图组件说明](screenshot/README.md)。

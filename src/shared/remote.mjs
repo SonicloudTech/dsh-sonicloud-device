@@ -37,6 +37,11 @@ export const REMOTE = {
   descriptors: [
     define('catalog', [], catalog),
     define('devices', [], devices),
+    define('captureScreenshot', [], z.boolean()),
+    define('screenshotPermissions', [['action', z.enum(['check', 'screen', 'accessibility', 'refresh'])]],
+      z.object({ supported: z.boolean(), screenRecording: z.boolean(), accessibility: z.boolean(), helperApp: text }).strict()),
+    define('typingPermissions', [['action', z.enum(['check', 'accessibility', 'refresh'])]],
+      z.object({ supported: z.boolean(), accessibility: z.boolean(), helperApp: text }).strict()),
     define('saveDevice', [['sn', snSchema], ['revision', z.number().int().nonnegative()], ['preferences', preferencesSchema]],
       z.object({ revision: z.number(), preferences: preferencesSchema, message: text })),
     define('watch', [['clientId', id]], event, { mode: 'stream', cancellation: { parameter: 'signal' } }),

@@ -73,6 +73,10 @@ export function Devices({ controller, sidebar }) {
   const devices = state.devices, device = devices.find(item => item.id === selected) ?? devices[0];
   const index = device ? devices.indexOf(device) : 0;
   const count = new Set(devices.filter(item => item.identityConfirmed).map(item => item.sn)).size;
+  const permissions = state.screenshotPermissions;
+  const screenMissing = permissions?.supported && !permissions.screenRecording;
+  const permissionBusy = state.screenshotPermissionBusy;
+  const typingPermissions = state.typingPermissions;
   return <section className="dsh-mouse-settings" aria-label="声云设备">
     <header className="dsh-mouse-head">
       <h2>声云设备</h2>
@@ -91,6 +95,46 @@ export function Devices({ controller, sidebar }) {
       <Row label="设备电量"><span className="dsh-mouse-value">{device.battery === null ? '未知' : `${device.battery}%`}</span></Row>
       {device.type === 'smart-mouse' ? <DeviceForm key={device.id} device={device} controller={controller} state={state} /> : <p>此设备类型暂未提供专属设置。</p>}
     </>}
+    {typingPermissions?.supported && <div aria-label="打字上屏权限" aria-busy={state.typingPermissionBusy}>
+      <p><strong>Sonicloud Voice</strong> 辅助功能：{typingPermissions.accessibility ? '已授权' : '待授权'}</p>
+      {!typingPermissions.accessibility && <p>将识别文字自动填入桌面应用需要此权限；未授权时仍可识别并复制文字。</p>}
+      <div className="dsh-mouse-controls">
+        {!typingPermissions.accessibility && <Button aria-label="授权打字辅助功能" disabled={state.typingPermissionBusy} onClick={() => controller.refreshTypingPermissions('accessibility')}>授权打字辅助功能</Button>}
+        <Button aria-label="重新检查打字权限" disabled={state.typingPermissionBusy} onClick={() => controller.refreshTypingPermissions('refresh')}>{state.typingPermissionBusy ? '正在检查…' : '已授权，重新检查'}</Button>
+      </div>
+      {state.typingPermissionMessage && <p role="status">{state.typingPermissionMessage}</p>}
+      {!typingPermissions.accessibility && typingPermissions.helperApp && <details>
+        <summary>找不到 Sonicloud Voice 时查看组件位置</summary>
+        <p>在辅助功能权限列表中需要手动添加时，使用下方位置：</p>
+        <code style={{ overflowWrap: 'anywhere' }}>{typingPermissions.helperApp}</code>
+      </details>}
+    </div>}
+    {state.typingPermissionError && <div role="alert">
+      <p>{state.typingPermissionError}</p>
+      <Button aria-label="重新检查打字权限" disabled={state.typingPermissionBusy} onClick={() => controller.refreshTypingPermissions('refresh')}>{state.typingPermissionBusy ? '正在检查…' : '重新检查打字权限'}</Button>
+    </div>}
+    <Row label="截图" description={screenMissing ? '首次截图前请先授权屏幕录制，授权期间不会显示截图蒙层' : '点击按钮或按鼠标截图键，框选后可标注、复制、保存或贴图'}>
+      <Button aria-label="开始截图" disabled={state.screenshotBusy || screenMissing || Boolean(state.screenshotPermissionError) || (permissionBusy && !permissions)} onClick={() => controller.captureScreenshot()}>{state.screenshotBusy ? '正在启动…' : '开始截图'}</Button>
+    </Row>
+    {permissions?.supported && <div aria-label="截图权限" aria-busy={permissionBusy}>
+      <p>{permissions.screenRecording && permissions.accessibility ? <>截图组件 <strong>screenhelper</strong> 权限已就绪。</> : <>请为截图组件 <strong>screenhelper</strong> 授权。</>}</p>
+      <p role="status">屏幕录制：{permissions.screenRecording ? '已授权' : '待授权'}（截图必需）<br />辅助功能：{permissions.accessibility ? '已授权' : '待授权'}（自动滚动可选，普通截图和手动滚动不受影响）</p>
+      <div className="dsh-mouse-controls">
+        {!permissions.screenRecording && <Button aria-label="授权屏幕录制" disabled={permissionBusy} onClick={() => controller.refreshScreenshotPermissions('screen')}>授权屏幕录制</Button>}
+        {!permissions.accessibility && <Button aria-label="授权辅助功能" disabled={permissionBusy} onClick={() => controller.refreshScreenshotPermissions('accessibility')}>授权辅助功能</Button>}
+        <Button aria-label="重新检查截图权限" disabled={permissionBusy} onClick={() => controller.refreshScreenshotPermissions('refresh')}>{permissionBusy ? '正在检查…' : '已授权，重新检查'}</Button>
+      </div>
+      {state.screenshotPermissionMessage && <p role="status">{state.screenshotPermissionMessage}</p>}
+      {(!permissions.screenRecording || !permissions.accessibility) && permissions.helperApp && <details>
+        <summary>找不到 screenhelper 时查看组件位置</summary>
+        <p>在系统权限列表中需要手动添加时，使用下方位置：</p>
+        <code style={{ overflowWrap: 'anywhere' }}>{permissions.helperApp}</code>
+      </details>}
+    </div>}
+    {state.screenshotPermissionError && <div role="alert">
+      <p>{state.screenshotPermissionError}</p>
+      <Button aria-label="重新检查截图权限" disabled={permissionBusy} onClick={() => controller.refreshScreenshotPermissions('refresh')}>{permissionBusy ? '正在检查…' : '重新检查截图权限'}</Button>
+    </div>}
   </section>;
 }
 

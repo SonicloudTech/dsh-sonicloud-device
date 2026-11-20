@@ -73,7 +73,7 @@ dsh plugin --profile desktop add /绝对路径/项目目录/artifacts/实际包�
 | 路径 | 职责 |
 | --- | --- |
 | `src/client/` | React 设备设置、偏好编辑、AI 对话桥接与连接重试 |
-| `src/desktop/`、`native/desktop/` | 桌面浮层进程、私有标准流协议及系统输入框回填 |
+| `src/desktop/`、`native/desktop/`、`native/screenshot/` | 桌面浮层、输入框回填及独立截图进程 |
 | `src/host/` | 宿主插件入口、Remote 注册与存储适配 |
 | `src/devices/` | SDK 独立进程、设备管理、偏好、语音会话与按键动作 |
 | `src/asr/` | 语音服务配置、鉴权与流式识别 |
@@ -92,6 +92,7 @@ dsh plugin --profile desktop add /绝对路径/项目目录/artifacts/实际包�
 - `insert` 携带录音时的 `aiAutoSend`，通过 `requestDraftInitialization` 追加草稿，按开关调用目标组件的 `inputActions.submit()`。请求绑定同一前端连接；断开不重放填充，结束释放引用。原生浮层对 `ai_input` 只提供预览、取消和失败结果复制。
 
 - macOS：`native/desktop/VoicePanel.swift` 构建不激活的 NSPanel，默认采用兼容粘贴，核对进程、窗口、文档、焦点和输入活动计数；可读取内容与选区时同时检查，不再要求辅助功能写入接口。随包提供 ARM64 应用；修改源码后在 macOS 执行 `node scripts/native/build-desktop.mjs`，需要 Xcode Command Line Tools。普通用户无需 Swift 工具链。
+- Sonicloud Voice 的 `permissions` 命令可在无录音时查询辅助功能状态，不显示浮层；只有用户点击授权才发起原生请求，活动语音期间不弹授权窗口。该组件与 screenhelper 分别授权，未授权不阻止识别和复制回退。启动前恢复 Mac 可执行文件的 `0755` 权限，以兼容 Windows 生成的 npm 包。
 - Windows：`windows.ps1` 在隐藏的 STA 进程中加载 `VoicePanel.cs`，使用系统 WinForms 与 UI Automation，无需额外下载运行时。不支持安全回填的控件显示结果供复制。验证范围见下文记录。
 - 浮层和 Host 通过私有 stdin/stdout 交换 JSON，文字不进入命令行、临时文件或日志；macOS 默认通过临时粘贴回填，随后恢复此前的全部剪贴板类型，若期间有新复制则保留新内容。其他剪贴板写入仅来自用户点击“复制结果”。辅助功能权限不足不阻止预览，但不能自动回填。
 - 开发代际复制 `native/desktop/` 并将浮层模块的资源路径固定到对应代际。修改开发构建脚本后须重启 `npm run dev`。
@@ -138,6 +139,8 @@ DPI 选项及保存值见[鼠标设置](../specs/mouse-settings.md#dpi-设置)�
 
 ## 验证变更
 
+截图组件的来源、部署、原生补丁、平台限制和权限统一见[截图组件说明](../../native/screenshot/README.md)。截图使用独立 Node worker 加载客户端库；开发构建同时生成该 worker 并复制运行依赖。
+
 提交代码前执行：
 
 ```sh
@@ -153,6 +156,8 @@ npm test
 | 快速检查单个模块 | `node --test tests/devices.test.mjs`，文件名替换为目标测试；直接调用不会触发构建，依赖 `dist/` 时先运行 `npm run build` |
 | 界面与热重载 | 在 Harness 中保存源码，确认重载日志、界面更新、设置保存及重载后配置恢复 |
 | 设备与语音 | 用实际鼠标验证相关连接方式、按键、录音、取消、重连及多设备隔离；记录平台与设备信息 |
+| 截图 | `node --test tests/screenshot*.test.mjs` 检查进程、销毁时序、缓存与资源；再在目标平台验证鼠标截图键、页面按钮、选区、复制/保存/贴图/滚动、取消、权限及禁用清理 |
+| macOS 权限 | 自动化核对首次启用与重连检查、两个组件的请求/状态隔离、缺屏幕权限不启动蒙层及打字复制回退；真实系统弹窗、授权点击、重新授权与操作效果由用户人工验证 |
 | 包内容或安装入口 | `npm pack --dry-run` 检查文件列表；再打包安装，确认包含前端产物、宿主源码、patch、原生库及许可证，不包含 `work/` 等开发产物 |
 | ASR 服务连通性 | 按需运行 `npm run probe -- <设备SN>`；该命令访问真实 Token / WSS 服务，仅检查鉴权握手，不采集或发送音频 |
 
@@ -160,7 +165,7 @@ npm test
 
 ### 已有验证记录
 
-以下汇总截至 2026-11-09 的历史记录，不代表每次提交均已通过。维护者已确认完成 0.1.0 的 README 实机验收；专项验证仍以表内范围为准，未记录的场景不推定通过。发布平台记录单独维护在 [CI/CD 规格](../specs/ci-cd.md#6-验收与平台状态)。
+以下表格为截至 2026-11-09 的历史记录，不代表每次提交均已通过；后续专项结果按日期列于表后。维护者已确认完成 0.1.0 的 README 实机验收；未记录的场景不推定通过。发布平台记录单独维护在 [CI/CD 规格](../specs/ci-cd.md#6-验收与平台状态)。
 
 | 范围 | 已验证 | 边界 |
 | --- | --- | --- |
@@ -171,7 +176,30 @@ npm test
 | 开发重载 | 隔离 profile 下同一 Host 进程替换后端、通知前端、重建 SDK；自动化覆盖失败保护、监听、恢复及退出清理 | 桌面实际重绘及 Windows 开发流程待验证 |
 | 语言与服务 | 语言范围曾核对官方文档；普通话、英语、日语、粤语、法语及普通话繁体通过合成音频抽样 | 其余语言、新鉴权与文本翻译实网链路待验证 |
 
-专项待验证：BLE/2.4G 音频与尾音时序、DPI 固件映射、系统按键及辅助功能权限、Windows 原生浮层与真实鼠标链路。产品与硬件待确认事项见[插件规格第 8 节](../specs/smart-mouse-plugin.md#8-待确认与联调)。
+当时未完成的专项包括 BLE/2.4G 音频与尾音时序、DPI 固件映射、系统按键及辅助功能权限、Windows 原生浮层与真实鼠标链路；本次截图、授权和打字上屏的后续结果见下文。产品与硬件待确认事项见[插件规格第 8 节](../specs/smart-mouse-plugin.md#8-待确认与联调)。
+
+#### 2026-11-20：截图集成与 macOS 授权
+
+本次改动：
+
+- 接入 ScreenTool 1.2.2 的 Windows x64、macOS ARM64 独立截图进程，提供鼠标截图键和页面按钮；支持选区、标注、复制、保存、贴图及滚动截图，处理重复触发、失败和停用清理。
+- 截图操作行移至页面底部。两端通过配置和原生补丁隐藏 OCR、图片翻译及滚动 OCR/Word 导出入口，保留滚动截图；未接入对应云服务。
+- 仅 macOS 增加首次启用及重连时的权限检查与人工授权引导：screenhelper 申请屏幕录制及辅助功能，Sonicloud Voice 单独申请辅助功能。缺屏幕录制权限时不显示截图蒙层；缺辅助功能不阻止普通截图和手动滚动。Windows 不显示授权区域，原有截图和打字流程保持。
+- macOS 两个组件完成 Developer ID 签名与严格验签，并修复跨平台打包丢失 Voice 执行位的问题。旧版 Voice 授权可能需要重新确认；本次未执行 Apple 公证。隐藏机制、构建及系统要求统一见[截图组件说明](../../native/screenshot/README.md)。
+
+验证结果：
+
+| 范围 | 结果 | 依据与边界 |
+| --- | --- | --- |
+| Windows 本地 Harness | 截图、打字上屏人工验证通过 | 用户安装最新版后明确确认通过；安装检查确认 Voice 和鼠标 worker 已启动，授权接口返回 `supported: false`，宿主程序、原配置及其他插件依赖未改动 |
+| macOS Harness | 授权引导及授权后使用人工确认可行 | 用户反馈“已经验证了，可行”；授权前检查另确认缺屏幕录制时拦截截图、不创建会话，Voice 执行位由 `0644` 恢复为 `0755`，两组件严格验签通过 |
+| 两端安装 | 同一份 0.1.2 测试包安装成功 | 每端均校验 96 个包内文件；本地安装检查与用户人工验收分别记录 |
+| JavaScript 自动化 | 164 通过、1 跳过、0 失败 | Windows 上运行 `npm test`；跳过项为需要 macOS Swift 工具链的平台测试 |
+| 截图原生回归 | Windows 12 通过；macOS 20 通过，均无失败 | Windows 为入口显隐 4 项、配置 8 项；macOS 另含权限策略 8 项，计数包含 QtTest 初始化及清理 |
+
+交付包为 `sonicloud-dsh-sonicloud-device-0.1.2.tgz`，SHA-256：`840bc54eefa2d05bdf6d49b25c73cc42a53556efb669a4aae61f5b9ca9d040a6`。两端均已安装到 Harness 的 `desktop` profile；本次为本地测试交付，尚未正式发布。
+
+原始本地证据位于 `test-results/mac-permissions-2026-11-20/` 和 `test-results/windows-latest-install-2026-11-20/`，不入库。Mac 安装回执中的未授权状态是人工操作前的检查快照，不代表最终授权状态。用户反馈未逐项列出标注、保存、贴图、滚动截图、隐藏入口及各输入控件的独立用例，本记录不将其扩展为所有子场景逐项验收通过。
 
 ## 贡献流程
 

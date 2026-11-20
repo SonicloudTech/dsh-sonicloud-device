@@ -1,0 +1,545 @@
+--- a/ipc/helper_gateway.h
++++ b/ipc/helper_gateway.h
+@@ -28,6 +28,7 @@
+ //    中继宿主），relay 应答经 ocr_result 命令回流 deliverResult
+ class HelperGateway : public QObject
+ {
++    friend class TestMacPermissions;
+     Q_OBJECT
+ public:
+     explicit HelperGateway(QObject* parent = nullptr);
+@@ -60,9 +61,18 @@
+     void onPinEdited(quintptr id, const PinDocument& doc);
+     void onPinEditCancelled(quintptr id);
+ 
++protected:
++    virtual bool screenPermissionGranted() const;
++    virtual bool accessibilityPermissionGranted() const;
++    virtual void promptScreenPermission();
++    virtual void promptAccessibilityPermission();
++    virtual void beginCapture();
++    virtual void sendEvent(const QJsonObject& header, const QByteArray& payload = QByteArray());
++
+ private:
+     void ensureLabel();
+-    void sendEvent(const QJsonObject& header, const QByteArray& payload = QByteArray());
++    void sendStateReport();
++    void requestPermission(const QString& permission);
+     // [FOLLOW-ANCHOR] 上报截图会话锚定屏参数（start_capture 与跟屏重锚共用）
+     void sendSessionStarted();
+     void enterDetached();
+--- a/ipc/helper_gateway.cpp
++++ b/ipc/helper_gateway.cpp
+@@ -25,11 +25,14 @@
+ #include <QLocalSocket>
+ #include <QScreen>
+ #include <QTimer>
++#include <QSignalBlocker>
+ #ifdef Q_OS_MAC
+ // [MAC-PERM-GUIDE] state_report 权限字段：AXIsProcessTrusted/
+ // CGPreflightScreenCaptureAccess（ApplicationServices）
+ #include <ApplicationServices/ApplicationServices.h>
+ #include <QDir>
++#include <QDesktopServices>
++#include <QUrl>
+ #endif
+ 
+ #ifndef SCREENHELPER_VERSION
+@@ -186,6 +189,9 @@
+ #ifdef ENABLE_PIXPIN_SCROLL_CAPTURE
+         caps.append(QStringLiteral("scroll_capture"));
+ #endif
++#ifdef Q_OS_MAC
++        caps.append(QStringLiteral("permission_preflight"));
++#endif
+         sendEvent(QJsonObject{{"type", "hello_ack"},
+                               {"proto_ver", Ipc::kProtoVer},
+                               {"helper_ver", QLatin1String(SCREENHELPER_VERSION)},
+@@ -196,6 +202,11 @@
+     }
+     else if (type == QStringLiteral("set_config"))
+     {
++        if (header.contains(QStringLiteral("permission_request")))
++        {
++            requestPermission(header.value(QStringLiteral("permission_request")).toString());
++            return;
++        }
+         const QString oldLang = HelperConfig::instance().lang();
+         const QString oldTheme = HelperConfig::instance().uiTheme();
+         const QString oldIcon = HelperConfig::instance().uiIcon();
+@@ -242,17 +253,25 @@
+     }
+     else if (type == QStringLiteral("start_capture"))
+     {
+-        // [PIN-EDIT M2] 冲突规则：编辑会话被截图抢占 → 先取消（贴图恢复原样）
+-        if (m_pinEditing)
+-            cancelPinEdit();
+-        ensureLabel();
+-        if (m_capturing)
+-            m_label->stopScreenshot(); // 重复下发先复位会话
+-        m_label->showScreen();
+-        m_capturing = true;
+-        // [FOLLOW-ANCHOR] 会话启动即报锚定屏；此后蒙层跟屏重锚（光标换屏、
+-        // 首次按下前）由 screenReanchored → sendSessionStarted 补发刷新参数
+-        sendSessionStarted();
++        // Check before creating a capture window or reading pixels.
++        if (!screenPermissionGranted())
++        {
++            if (m_label && m_capturing)
++            {
++                const QSignalBlocker blocker(m_label);
++                m_label->stopScreenshot(QStringLiteral("permission_required"));
++            }
++            m_capturing = false;
++            sendStateReport();
++            // End the pending request so the client watchdog does not relaunch us.
++            sendEvent(QJsonObject{{"type", "session_ended"},
++                                  {"reason", QStringLiteral("permission_required")}});
++            sendEvent(QJsonObject{{"type", "error"},
++                                  {"code", QStringLiteral("permission_screen_required")},
++                                  {"message", QStringLiteral("Screen Recording permission is required before capture")}});
++            return;
++        }
++        beginCapture();
+     }
+     else if (type == QStringLiteral("cancel_capture"))
+     {
+@@ -261,6 +280,114 @@
+     }
+     else if (type == QStringLiteral("query_state"))
+     {
++        sendStateReport();
++    }
++    else if (type == QStringLiteral("shutdown"))
++    {
++        m_shutdownByHost = true;
++        const QString policy = header.value(QStringLiteral("pins_policy")).toString(QStringLiteral("close_now"));
++        if (policy == QLatin1String("keep_detached"))
++        {
++            enterDetached();
++        }
++        else
++        {
++            emit shutdownRequested(); // close_now：helper_main 直接退出
++        }
++    }
++    else
++    {
++        sendEvent(QJsonObject{{"type", "error"},
++                              {"code", "unknown_type"},
++                              {"message", type}});
++    }
++}
++
++bool HelperGateway::screenPermissionGranted() const
++{
++#ifdef Q_OS_MAC
++    return CGPreflightScreenCaptureAccess();
++#else
++    return true;
++#endif
++}
++
++bool HelperGateway::accessibilityPermissionGranted() const
++{
++#ifdef Q_OS_MAC
++    return AXIsProcessTrusted();
++#else
++    return true;
++#endif
++}
++
++void HelperGateway::promptScreenPermission()
++{
++#ifdef Q_OS_MAC
++    CGRequestScreenCaptureAccess();
++    QDesktopServices::openUrl(QUrl(QStringLiteral(
++        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")));
++#endif
++}
++
++void HelperGateway::promptAccessibilityPermission()
++{
++#ifdef Q_OS_MAC
++    const void* keys[] = { kAXTrustedCheckOptionPrompt };
++    const void* values[] = { kCFBooleanTrue };
++    CFDictionaryRef options = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1,
++        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
++    AXIsProcessTrustedWithOptions(options);
++    CFRelease(options);
++    QDesktopServices::openUrl(QUrl(QStringLiteral(
++        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")));
++#endif
++}
++
++void HelperGateway::requestPermission(const QString& permission)
++{
++    if (permission != QLatin1String("screen") && permission != QLatin1String("accessibility"))
++    {
++        sendEvent(QJsonObject{{"type", "error"},
++                              {"code", QStringLiteral("permission_request_invalid")},
++                              {"message", QStringLiteral("Unknown permission request")}});
++        return;
++    }
++    if (m_capturing || m_pinEditing)
++    {
++        sendStateReport();
++        sendEvent(QJsonObject{{"type", "error"},
++                              {"code", QStringLiteral("permission_request_busy")},
++                              {"message", QStringLiteral("Finish capture or pin editing before permission setup")}});
++        return;
++    }
++#ifdef Q_OS_MAC
++    QTimer::singleShot(0, this, [this, permission] {
++        // A capture can start between receiving the command and this callback.
++        if (m_capturing || m_pinEditing)
++        {
++            sendStateReport();
++            sendEvent(QJsonObject{{"type", "error"},
++                                  {"code", QStringLiteral("permission_request_busy")},
++                                  {"message", QStringLiteral("Finish capture or pin editing before permission setup")}});
++            return;
++        }
++        if (permission == QLatin1String("screen") && !screenPermissionGranted())
++            promptScreenPermission();
++        else if (permission == QLatin1String("accessibility") && !accessibilityPermissionGranted())
++            promptAccessibilityPermission();
++        // Requesting is asynchronous; this reports status, never a grant promise.
++        sendStateReport();
++    });
++#else
++    sendEvent(QJsonObject{{"type", "error"},
++                          {"code", QStringLiteral("permission_request_unsupported")},
++                          {"message", QStringLiteral("Permission setup is only available on macOS")}});
++#endif
++}
++
++void HelperGateway::sendStateReport()
++{
+         // [MAC-PERM-GUIDE] mac 下附加权限实测字段：宿主启动引导用（helper 是
+         // 屏幕录制/辅助功能的权限主体，宿主自身无法代查）。旧宿主忽略未知
+         // 字段；新宿主按 helper_ver>=1.2.2 判定字段可用。win 不附加（宿主
+@@ -268,6 +395,7 @@
+         QJsonObject rep{{"type", "state_report"},
+                         {"pins_alive", m_pinMap.size()},
+                         {"capturing", m_capturing},
++                        {"pin_editing", m_pinEditing},
+                         {"helper_ver", QLatin1String(SCREENHELPER_VERSION)},
+                         {"ui_theme", ThemeManager::instance().currentName()}};
+ #ifdef Q_OS_MAC
+@@ -279,30 +407,22 @@
+             if (d.cdUp() && d.cdUp() && d.dirName().endsWith(QLatin1String(".app")))
+                 rep.insert(QStringLiteral("helper_app"), d.absolutePath());
+         }
+-        rep.insert(QStringLiteral("perm_a11y"), AXIsProcessTrusted());
+-        rep.insert(QStringLiteral("perm_screen"), CGPreflightScreenCaptureAccess());
++        rep.insert(QStringLiteral("perm_a11y"), accessibilityPermissionGranted());
++        rep.insert(QStringLiteral("perm_screen"), screenPermissionGranted());
+ #endif
+         sendEvent(rep);
+-    }
+-    else if (type == QStringLiteral("shutdown"))
+-    {
+-        m_shutdownByHost = true;
+-        const QString policy = header.value(QStringLiteral("pins_policy")).toString(QStringLiteral("close_now"));
+-        if (policy == QLatin1String("keep_detached"))
+-        {
+-            enterDetached();
+-        }
+-        else
+-        {
+-            emit shutdownRequested(); // close_now：helper_main 直接退出
+-        }
+-    }
+-    else
+-    {
+-        sendEvent(QJsonObject{{"type", "error"},
+-                              {"code", "unknown_type"},
+-                              {"message", type}});
+-    }
++}
++
++void HelperGateway::beginCapture()
++{
++    if (m_pinEditing)
++        cancelPinEdit();
++    ensureLabel();
++    if (m_capturing)
++        m_label->stopScreenshot();
++    m_label->showScreen();
++    m_capturing = true;
++    sendSessionStarted();
+ }
+ 
+ void HelperGateway::ensureLabel()
+@@ -314,6 +434,12 @@
+     connect(m_label, &ScreenLabel::signalOCRMap, this, &HelperGateway::onOcrMap);
+     connect(m_label, &ScreenLabel::convertImage, this, &HelperGateway::onConvertImage);
+     connect(m_label, &ScreenLabel::sessionFinished, this, &HelperGateway::onSessionFinished);
++    connect(m_label, &ScreenLabel::screenPermissionRequired, this, [this] {
++        sendStateReport();
++        sendEvent(QJsonObject{{"type", "error"},
++                              {"code", QStringLiteral("permission_screen_required")},
++                              {"message", QStringLiteral("Screen Recording permission is required before capture")}});
++    });
+     connect(m_label, &ScreenLabel::pinCreated, this, &HelperGateway::onPinCreated);
+     // [FOLLOW-ANCHOR] 跟屏重锚 → 补发 session_started 刷新锚定屏参数
+     connect(m_label, &ScreenLabel::screenReanchored, this, [this]() {
+--- a/core/screen_label.h
++++ b/core/screen_label.h
+@@ -108,7 +108,7 @@
+ 
+     void showScreen();  // interface
+     void updateUiLanguage();
+-    void stopScreenshot();
++    void stopScreenshot(const QString& reason = QStringLiteral("canceled"));
+     // [PIN-EDIT M2] 贴图编辑模式：入口/查询/取消（网关冲突规则调用 cancel）
+     // [R4-1] 原窗口编辑：编辑器作为子部件嵌入宿主贴图窗口（对齐参考 EnterEdit
+     // 的"贴图窗口自身变画布"），覆盖其内容区，全程只有一个窗口
+@@ -258,6 +258,7 @@
+ 
+ 
+ signals:
++    void screenPermissionRequired();
+     void signalCutMap(const QPixmap);  //获取截图
+     void signalOCRMap(const QPixmap, const QString& source);  // [PIN-EDIT M2] 增 source（region/scroll/pin）
+     void captureFinished();
+--- a/core/screen_label.cpp
++++ b/core/screen_label.cpp
+@@ -319,7 +319,7 @@
+ #endif
+ }
+ 
+-void ScreenLabel::stopScreenshot()
++void ScreenLabel::stopScreenshot(const QString& reason)
+ {
+     if (capturing_)
+     {
+@@ -338,7 +338,7 @@
+ #endif
+         close();
+         // [HELPER-IPC] 宿主 cancel_capture 路径
+-        emit sessionFinished(QStringLiteral("canceled"));
++        emit sessionFinished(reason);
+     }
+     // [FOLLOW-ANCHOR] 会话结束停跟屏（tick 亦有自守卫，此处显式停更直观）
+     m_followTimer->stop();
+@@ -1522,54 +1522,14 @@
+         return;
+     }
+ #ifdef Q_OS_MAC
+-    // [MAC-A11Y] 双权限自检（每进程各提醒一次，授权后不再出现；弹窗在
+-    // hide()/PixPin UI 之前完成，不进长截图画面）：
+-    //  1) 辅助功能——PixPin 工具条"自动滚动"注入的合成滚轮事件会被未授权
+-    //     进程静默丢弃（2026-09-17 实证：未授权连发滚轮无效；真实鼠标手动
+-    //     滚动不受影响）；
+-    //  2) 屏幕录制——PixPin 拼接帧走 CGDisplay 旧采集 API，无此权限只回
+-    //     壁纸：成图黑底（2026-09-20 实证亮度 37-48 vs 186 双态）。
+-    qInfo() << "[MAC-A11Y] AXIsProcessTrusted =" << AXIsProcessTrusted()
+-            << " ScreenCapturePreflight =" << CGPreflightScreenCaptureAccess();
+-    // [MAC-A11Y] 引导文案中的 app 路径必须给真实路径：helper 的部署形态
+-    // 有两种（独立 deps/screenTool/ 与 electron 包内 Resources/deps/
+-    // screenTool/），写死任一都会误导另一种形态的用户（2026-09-20 实证：
+-    // electron 用户照 deps 路径找不到 app）。从自身可执行文件位置回推
+-    // bundle 根展示。
+-    const QString helperAppPath = [] {
+-        QDir dir(QCoreApplication::applicationDirPath());
+-        dir.cdUp(); dir.cdUp(); // MacOS/ → Contents/ → screenhelper.app/
+-        return dir.absolutePath();
+-    }();
+-    static bool s_a11yPrompted = false;
+-    if (!s_a11yPrompted && !AXIsProcessTrusted())
+-    {
+-        s_a11yPrompted = true;
+-        if (QMessageBox::question(nullptr, tr("辅助功能权限"),
+-                tr("滚动截图的“自动滚动”需要辅助功能权限（手动滚动不受影响）。\n\n"
+-                   "请到 系统设置 → 隐私与安全性 → 辅助功能，点“+”添加并勾选\n"
+-                   "screenhelper.app（路径：%1，可在弹窗里按 Cmd+Shift+G\n"
+-                   "粘贴上面的路径定位），添加后无需重启即生效。\n\n"
+-                   "现在打开系统设置？").arg(helperAppPath)) == QMessageBox::Yes)
+-        {
+-            QDesktopServices::openUrl(QUrl(QStringLiteral(
+-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")));
+-        }
+-    }
+-    static bool s_srPrompted = false;
+-    if (!s_srPrompted && !CGPreflightScreenCaptureAccess())
+-    {
+-        s_srPrompted = true;
+-        if (QMessageBox::question(nullptr, tr("屏幕录制权限"),
+-                tr("滚动截图需要屏幕录制权限，否则长图内容会是黑色背景。\n\n"
+-                   "请到 系统设置 → 隐私与安全性 → 屏幕录制，点“+”添加并勾选\n"
+-                   "screenhelper.app（路径：%1，可在弹窗里按 Cmd+Shift+G\n"
+-                   "粘贴上面的路径定位），添加后需重启 screenhelper 生效。\n\n"
+-                   "现在打开系统设置？").arg(helperAppPath)) == QMessageBox::Yes)
+-        {
+-            QDesktopServices::openUrl(QUrl(QStringLiteral(
+-                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")));
+-        }
++    qInfo() << "[MAC-PERMISSIONS] a11y =" << AXIsProcessTrusted()
++            << " screen =" << CGPreflightScreenCaptureAccess();
++    // Optional Accessibility must not interrupt manual scrolling. No dialogs here.
++    if (!CGPreflightScreenCaptureAccess())
++    {
++        stopScreenshot(QStringLiteral("permission_required"));
++        emit screenPermissionRequired();
++        return;
+     }
+ #endif
+     m_scrollCaptureParams.captureRect = cutRect.toRect();
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -257,6 +257,11 @@
+     add_executable(test_helper_config tests/test_helper_config.cpp)
+     target_link_libraries(test_helper_config PRIVATE ${QT_LINK}::Test screentool_core)
+     add_test(NAME helper_config COMMAND test_helper_config)
++    if(APPLE)
++        add_executable(test_mac_permissions tests/test_mac_permissions.cpp)
++        target_link_libraries(test_mac_permissions PRIVATE ${QT_LINK}::Test ${QT_LINK}::Widgets screentool_ipc)
++        add_test(NAME mac_permissions COMMAND test_mac_permissions)
++    endif()
+     if(TARGET PixPinScrollCapture)
+         add_executable(test_cloud_actions tests/test_cloud_actions.cpp)
+         target_link_libraries(test_cloud_actions PRIVATE ${QT_LINK}::Test ${QT_LINK}::Widgets screentool_core)
+--- /dev/null
++++ b/tests/test_mac_permissions.cpp
+@@ -0,0 +1,139 @@
++#include <QtTest/QtTest>
++#include <QJsonArray>
++#include <QJsonObject>
++#include "../ipc/helper_gateway.h"
++
++class PermissionGateway : public HelperGateway
++{
++public:
++    bool screen = false;
++    bool accessibility = false;
++    int screenRequests = 0;
++    int accessibilityRequests = 0;
++    int captureStarts = 0;
++    QList<QJsonObject> events;
++    void dispatch(const QJsonObject& value)
++    {
++        QVERIFY(QMetaObject::invokeMethod(this, "onFrame", Qt::DirectConnection,
++            Q_ARG(QJsonObject, value), Q_ARG(QByteArray, QByteArray())));
++    }
++    QJsonObject last(const QString& type) const
++    {
++        for (auto i = events.crbegin(); i != events.crend(); ++i)
++            if (i->value("type").toString() == type) return *i;
++        return {};
++    }
++protected:
++    bool screenPermissionGranted() const override { return screen; }
++    bool accessibilityPermissionGranted() const override { return accessibility; }
++    void promptScreenPermission() override { ++screenRequests; }
++    void promptAccessibilityPermission() override { ++accessibilityRequests; }
++    void beginCapture() override { ++captureStarts; sendEvent(QJsonObject{{"type", "session_started"}}); }
++    void sendEvent(const QJsonObject& header, const QByteArray& = QByteArray()) override { events.append(header); }
++};
++
++class TestMacPermissions : public QObject
++{
++    Q_OBJECT
++private slots:
++    void missingScreenNeverCreatesOverlay();
++    void optionalAccessibilityDoesNotBlockCapture();
++    void stateAndCapabilityReport();
++    void requestValidationAndBusyGuard();
++    void explicitRequestsNeverPretendGranted();
++    void busyRaceDoesNotPrompt();
++};
++
++void TestMacPermissions::missingScreenNeverCreatesOverlay()
++{
++    PermissionGateway gateway;
++    gateway.dispatch(QJsonObject{{"type", "start_capture"}});
++    QCOMPARE(gateway.captureStarts, 0);
++    QVERIFY(gateway.m_label == nullptr);
++    QVERIFY(!gateway.m_capturing);
++    QVERIFY(gateway.last("session_started").isEmpty());
++    QCOMPARE(gateway.last("session_ended").value("reason").toString(), QStringLiteral("permission_required"));
++    QCOMPARE(gateway.last("error").value("code").toString(), QStringLiteral("permission_screen_required"));
++    QVERIFY(!gateway.last("state_report").value("perm_screen").toBool());
++}
++
++void TestMacPermissions::optionalAccessibilityDoesNotBlockCapture()
++{
++    PermissionGateway gateway;
++    gateway.screen = true;
++    gateway.accessibility = false;
++    gateway.dispatch(QJsonObject{{"type", "start_capture"}});
++    QCOMPARE(gateway.captureStarts, 1);
++    QVERIFY(gateway.last("error").isEmpty());
++    QCOMPARE(gateway.accessibilityRequests, 0);
++}
++
++void TestMacPermissions::stateAndCapabilityReport()
++{
++    PermissionGateway gateway;
++    gateway.dispatch(QJsonObject{{"type", "hello"}});
++    QVERIFY(gateway.last("hello_ack").value("capabilities").toArray().contains(QStringLiteral("permission_preflight")));
++    gateway.m_pinEditing = true;
++    gateway.dispatch(QJsonObject{{"type", "query_state"}});
++    const auto report = gateway.last("state_report");
++    QVERIFY(report.contains("perm_screen"));
++    QVERIFY(report.contains("perm_a11y"));
++    QVERIFY(report.value("pin_editing").toBool());
++    QVERIFY(gateway.m_label == nullptr);
++    gateway.m_pinEditing = false;
++}
++
++void TestMacPermissions::requestValidationAndBusyGuard()
++{
++    PermissionGateway gateway;
++    for (const auto& value : QList<QJsonValue>{QJsonValue(""), QJsonValue("both"), QJsonValue(true), QJsonValue(1), QJsonValue(QJsonObject{})})
++    {
++        gateway.dispatch(QJsonObject{{"type", "set_config"}, {"permission_request", value}});
++        QCOMPARE(gateway.last("error").value("code").toString(), QStringLiteral("permission_request_invalid"));
++    }
++    for (const bool editing : {false, true})
++    {
++        gateway.m_capturing = !editing;
++        gateway.m_pinEditing = editing;
++        gateway.dispatch(QJsonObject{{"type", "set_config"}, {"permission_request", "screen"}});
++        QCOMPARE(gateway.last("error").value("code").toString(), QStringLiteral("permission_request_busy"));
++    }
++    gateway.m_capturing = false;
++    gateway.m_pinEditing = false;
++    QCoreApplication::processEvents();
++    QCOMPARE(gateway.screenRequests, 0);
++    QCOMPARE(gateway.accessibilityRequests, 0);
++    QVERIFY(gateway.m_label == nullptr);
++}
++
++void TestMacPermissions::explicitRequestsNeverPretendGranted()
++{
++    PermissionGateway gateway;
++    gateway.dispatch(QJsonObject{{"type", "set_config"}, {"permission_request", "screen"}});
++    QTRY_COMPARE(gateway.screenRequests, 1);
++    QVERIFY(!gateway.last("state_report").value("perm_screen").toBool());
++    gateway.dispatch(QJsonObject{{"type", "set_config"}, {"permission_request", "accessibility"}});
++    QTRY_COMPARE(gateway.accessibilityRequests, 1);
++    QVERIFY(!gateway.last("state_report").value("perm_a11y").toBool());
++    QCOMPARE(gateway.captureStarts, 0);
++    QVERIFY(gateway.m_label == nullptr);
++    gateway.screen = true;
++    gateway.dispatch(QJsonObject{{"type", "set_config"}, {"permission_request", "screen"}});
++    QCoreApplication::processEvents();
++    QCOMPARE(gateway.screenRequests, 1);
++    QVERIFY(gateway.last("state_report").value("perm_screen").toBool());
++}
++
++void TestMacPermissions::busyRaceDoesNotPrompt()
++{
++    PermissionGateway gateway;
++    gateway.dispatch(QJsonObject{{"type", "set_config"}, {"permission_request", "screen"}});
++    gateway.m_capturing = true;
++    QCoreApplication::processEvents();
++    QCOMPARE(gateway.screenRequests, 0);
++    QCOMPARE(gateway.last("error").value("code").toString(), QStringLiteral("permission_request_busy"));
++    gateway.m_capturing = false;
++}
++
++QTEST_MAIN(TestMacPermissions)
++#include "test_mac_permissions.moc"

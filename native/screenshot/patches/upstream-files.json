@@ -1,0 +1,22 @@
+[
+  {
+    "path": "core/screen_tool_bar.cpp",
+    "sha256": "0b7553a9100bb4e3766328c8188c4900cd1b5aff5488f0488765e9350893a2fa"
+  },
+  {
+    "path": "core/screen_label.h",
+    "sha256": "b0105929067c2e3648cac46eaf668e2778b8e93a1084b947d2525e3900d47de8"
+  },
+  {
+    "path": "core/screen_label.cpp",
+    "sha256": "efc6d031df62be1e102d8c0954a4064e24240d68985fad0dcea28d8b4d12ca3f"
+  },
+  {
+    "path": "ipc/helper_gateway.cpp",
+    "sha256": "42c352b33a521807ff19960eda168b5bf7b58a240e19b1d71c3e8c977d4659a8"
+  },
+  {
+    "path": "CMakeLists.txt",
+    "sha256": "907778a37e319d1fe8e475f74e532c0f51c79b517b6eae85325d42211a505d49"
+  }
+]

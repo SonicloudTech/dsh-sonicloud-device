@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { chmodSync, existsSync } from 'node:fs';
 
 // Private stdio IPC: transcripts never appear in process arguments, files, or logs.
 export class DesktopPresentation {
@@ -13,7 +14,11 @@ export class DesktopPresentation {
     if (this.child) return;
     const root = new URL('../../native/desktop/', import.meta.url);
     let file, args = [];
-    if (this.platform === 'darwin') file = fileURLToPath(new URL(`darwin-${this.arch}/Sonicloud Voice.app/Contents/MacOS/sonicloud-voice`, root));
+    if (this.platform === 'darwin') {
+      file = fileURLToPath(new URL(`darwin-${this.arch}/Sonicloud Voice.app/Contents/MacOS/sonicloud-voice`, root));
+      // Windows 生成的 npm 包不保留 Unix 执行位，启动前恢复随包程序权限。
+      if (existsSync(file)) chmodSync(file, 0o755);
+    }
     else if (this.platform === 'win32') {
       file = 'powershell.exe'; args = ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('windows.ps1', root))];
     } else throw new Error('当前平台不支持桌面语音浮层');
@@ -28,7 +33,7 @@ export class DesktopPresentation {
       if (pending) {
         clearTimeout(pending.timer); this.requests.delete(message.id);
         if (message.ok) pending.resolve(message.value);
-        else pending.reject(new Error('桌面语音浮层操作失败'));
+        else pending.reject(new Error(message.message || '桌面语音浮层操作失败'));
       }
     });
     const failed = () => {
@@ -46,13 +51,13 @@ export class DesktopPresentation {
     if (!this.child || this.closed) return;
     this.child.stdin.write(JSON.stringify(message) + '\n');
   }
-  request(message) {
+  request(message, { killOnTimeout = true } = {}) {
     this.start();
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.requests.delete(id); reject(new Error('桌面语音浮层响应超时，请重试'));
-        this.child?.kill();
+        if (killOnTimeout) this.child?.kill();
       }, this.timeoutMs);
       this.requests.set(id, { resolve, reject, timer }); this.send({ ...message, id });
     });
@@ -60,6 +65,15 @@ export class DesktopPresentation {
   async begin(run) {
     this.sessionId = run.id;
     await this.request({ command: 'begin', sessionId: run.id, action: run.action });
+  }
+  async permissions(action = 'check') {
+    if (!['check', 'accessibility', 'refresh'].includes(action)) throw new Error('不支持此打字权限操作');
+    if (this.closed) throw new Error('桌面语音浮层已关闭');
+    if (this.platform !== 'darwin') return { supported: false, accessibility: true, helperApp: '' };
+    const value = await this.request({ command: 'permissions', action }, { killOnTimeout: false });
+    if (!value || value.supported !== true || typeof value.accessibility !== 'boolean' || typeof value.helperApp !== 'string')
+      throw new Error('打字权限状态不可用，请更新插件后重试');
+    return value;
   }
   event(event) {
     if (event.type === 'devices' || event.type === 'request' || event.type === 'result') return;

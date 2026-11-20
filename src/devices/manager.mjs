@@ -10,8 +10,8 @@ import { translateText } from './translate.mjs';
 
 const VOICE = new Set(['voice_input', 'translate', 'speechSearch', 'ai_input']);
 export class DeviceManager {
-  constructor({ credentials, recognize, prepare = async () => undefined, sdk = new MouseSdk(), action = systemAction, translate = translateText, desktop, aiConversation, config = {} }) {
-    Object.assign(this, { sdk, recognize, prepare, action, translate, desktop, aiConversation, config });
+  constructor({ credentials, recognize, prepare = async () => undefined, sdk = new MouseSdk(), action = systemAction, translate = translateText, desktop, screenshot, aiConversation, config = {} }) {
+    Object.assign(this, { sdk, recognize, prepare, action, translate, desktop, screenshot, aiConversation, config });
     this.store = new DeviceStore(credentials);
     this.devices = new Map(); this.clients = new Set(); this.pressed = new Map(); this.pending = Promise.resolve();
     this.status = '尚未连接 SDK'; this.disposed = false;
@@ -31,6 +31,8 @@ export class DeviceManager {
       desktop.onCancel = id => this.cancel(id);
       desktop.onFault = () => this.cancel(undefined, '桌面语音浮层已断开，请重新触发');
     }
+    this.onScreenshotNotice = message => { if (!this.disposed) this.publish({ type: 'notice', message }); };
+    screenshot?.on('notice', this.onScreenshotNotice);
     sdk.on('event', this.onEvent); sdk.on('fault', this.onFault);
   }
   async start() {
@@ -172,12 +174,27 @@ export class DeviceManager {
     } catch (error) { device.dpiState = 'failed'; return error.message; }
   }
   async key(device, event) {
-    if (device.type !== 'smart-mouse' || (!this.owner && !this.desktop)) return;
+    if (this.disposed || device.type !== 'smart-mouse') return;
+    if (event.key !== 'capture' && !this.owner && !this.desktop) return;
     if (!device.identityConfirmed) {
       if (event.action === 'down' || event.action === 'click') this.publish({ type: 'notice', message: '设备身份未确认，请重新连接鼠标' });
       return;
     }
     const key = `${device.id}:${event.key}:${event.index ?? 0}`;
+    if (event.key === 'capture') {
+      const pressed = this.pressed.get(key);
+      if (event.action === 'up') {
+        if (pressed) pressed.releasedAt = Date.now();
+        return;
+      }
+      if (event.action !== 'click' && event.action !== 'down') return;
+      // SDK 固件可能同时上报 down 与 click；松键后短暂保留标记以吸收尾随 click。
+      if (pressed && (!pressed.releasedAt || (event.action === 'click' && Date.now() - pressed.releasedAt < 300))) return;
+      if (event.action === 'down') this.pressed.set(key, { capture: true });
+      else this.pressed.delete(key);
+      void this.captureScreenshot('mouse').catch(error => this.onScreenshotNotice(error.message));
+      return;
+    }
     if (event.action === 'up') {
       const pressed = this.pressed.get(key); this.pressed.delete(key);
       if (this.run?.key === key) this.release(this.run);
@@ -208,6 +225,21 @@ export class DeviceManager {
     // Opening the app/client must not block key-up or device-disconnect events.
     if (action === 'ai_input') void this.begin(run, device);
     else await this.begin(run, device);
+  }
+  async captureScreenshot(trigger = 'ui') {
+    if (this.disposed) throw new Error('插件已关闭，请重新启用后截图');
+    if (!this.screenshot) throw new Error('截图服务不可用，请重新加载插件');
+    return this.screenshot.capture(trigger);
+  }
+  async screenshotPermissions(action = 'check') {
+    if (this.disposed) throw new Error('插件已关闭，请重新启用后检查截图权限');
+    if (!this.screenshot?.permissions) throw new Error('截图权限检查不可用，请重新加载插件');
+    return this.screenshot.permissions(action);
+  }
+  async typingPermissions(action = 'check') {
+    if (this.disposed) throw new Error('插件已关闭，请重新启用后检查打字权限');
+    if (!this.desktop?.permissions) throw new Error('打字权限检查不可用，请重新加载插件');
+    return this.desktop.permissions(action);
   }
   async prepareAi(run) {
     try {
@@ -358,7 +390,9 @@ export class DeviceManager {
     for (const queue of this.clients) queue.end(true);
     this.clients.clear(); this.owner = undefined;
     this.sdk.off('event', this.onEvent); this.sdk.off('fault', this.onFault);
+    this.screenshot?.off('notice', this.onScreenshotNotice);
     this.aiConversation?.close();
+    try { await this.screenshot?.close(); } catch { /* 截图进程退出失败不阻断设备和语音清理。 */ }
     await this.desktop?.close();
     await this.sdk.close();
   }
