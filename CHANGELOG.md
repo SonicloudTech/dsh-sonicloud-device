@@ -30,12 +30,21 @@
 
 ### Changed
 
+- Sign macOS Sonicloud Voice with a Developer ID; existing Accessibility grants from older versions may need to be confirmed again as prompted by the system.
+- Move the screenshot controls to the bottom of the Sonicloud Devices page.
 - Provide an English-default user guide with a Chinese version, UI installation, update, and removal instructions, and screenshots.
 - Refactor device and speech handling and share retry logic, preserving functionality and UI.
 - Streamline specifications and development docs, consolidating CI/CD configuration and release verification records.
 - Standardize on npm and remove outdated pnpm lockfile and configuration.
 - Relax release-notes rules: publishing falls back to the Unreleased section when the changelog has no section for the current version, so merging dev directly can ship.
 - Accept fully folded changelogs in release checks: an Unreleased section must stay at the top when present, and a fully folded changelog (version sections only) publishes from the current version section.
+
+### Fixed
+
+- Check macOS Screen Recording permission in both the host and native screenshot process before showing the overlay, preventing it from covering system permission prompts; missing Accessibility permission does not block regular screenshots or manual scrolling.
+- Restore macOS voice helper execution permissions lost during cross-platform packaging so packages built on Windows can start Sonicloud Voice.
+- Hide unsupported image translation and scrolling OCR/Word export actions in both Windows and macOS screenshot processes while keeping scrolling capture available; retain the original Developer ID identity for the macOS package.
+- Parse Windows tar line endings correctly during package checks so complete packages are not reported as missing files.
 
 ## 0.1.1 - 2026-11-09
 
