@@ -123,6 +123,23 @@ export const requiredFiles = [
   'native/win32-x64/uMouseSdk.dll', 'native/win32-x64/avcodec-58.dll', 'native/win32-x64/avutil-56.dll',
   'native/win32-x64/msvcp140.dll', 'native/win32-x64/vcruntime140.dll', 'native/win32-x64/vcruntime140_1.dll',
   'native/desktop/darwin-arm64/Sonicloud Voice.app/Contents/MacOS/sonicloud-voice', 'native/desktop/windows.ps1',
+  'native/desktop/darwin-arm64/Sonicloud Voice.app/Contents/_CodeSignature/CodeResources', 'native/desktop/VOICE_SOURCE.json',
+  'src/desktop/screenshot.mjs', 'src/desktop/screenshot-worker.mjs',
+  'native/screenshot/SOURCE.json', 'native/screenshot/README.md',
+  'native/screenshot/patches/hide-cloud-actions.patch',
+  'native/screenshot/patches/mac-permissions.patch',
+  'native/screenshot/patches/upstream-files.json',
+  'native/screenshot/win32-x64/screentool.dll', 'native/screenshot/win32-x64/screenhelper.exe',
+  'native/screenshot/win32-x64/Qt5Core.dll', 'native/screenshot/win32-x64/Qt5Gui.dll',
+  'native/screenshot/win32-x64/Qt5Widgets.dll', 'native/screenshot/win32-x64/Qt5Network.dll',
+  'native/screenshot/win32-x64/Qt5Svg.dll', 'native/screenshot/win32-x64/PixPinScrollCapture.dll',
+  'native/screenshot/win32-x64/platforms/qwindows.dll',
+  'native/screenshot/win32-x64/iconengines/qsvgicon.dll',
+  'native/screenshot/win32-x64/imageformats/qjpeg.dll', 'native/screenshot/win32-x64/imageformats/qsvg.dll',
+  'native/screenshot/win32-x64/libcrypto-1_1-x64.dll', 'native/screenshot/win32-x64/libssl-1_1-x64.dll',
+  'native/screenshot/win32-x64/msvcp140.dll', 'native/screenshot/win32-x64/vcruntime140.dll',
+  'native/screenshot/win32-x64/vcruntime140_1.dll', 'native/screenshot/win32-x64/qwindowsvistastyle.dll',
+  'native/screenshot/darwin-arm64/screentool-macos-1.2.2.zip',
 ];
 
 export function validateFileList(files) {

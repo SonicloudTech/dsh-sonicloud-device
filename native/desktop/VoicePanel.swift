@@ -268,6 +268,33 @@ final class VoiceUI: NSObject {
     }
     func handle(_ command: [String: Any]) {
         let name = command["command"] as? String ?? ""
+        if name == "permissions" {
+            let action = command["action"] as? String ?? "check"
+            guard ["check", "refresh", "accessibility"].contains(action) else {
+                if let id = command["id"] { emit(["id": id, "ok": false, "message": "不支持此打字权限操作"]) }
+                return
+            }
+            if action == "accessibility" {
+                guard !active && !resultPending else {
+                    if let id = command["id"] { emit(["id": id, "ok": false, "message": "请先结束语音输入，再设置打字权限"]) }
+                    return
+                }
+                if !AXIsProcessTrusted() {
+                    hide()
+                    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                    _ = AXIsProcessTrustedWithOptions(options)
+                    if let settings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                        NSWorkspace.shared.open(settings)
+                    }
+                }
+            }
+            let helperApp = Bundle.main.bundlePath.hasSuffix(".app") ? Bundle.main.bundlePath
+                : URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path
+            if let id = command["id"] {
+                emit(["id": id, "ok": true, "value": ["supported": true, "accessibility": AXIsProcessTrusted(), "helperApp": helperApp]])
+            }
+            return
+        }
         let incoming = command["sessionId"] as? String ?? ""
         var success = true
         let inserted = false

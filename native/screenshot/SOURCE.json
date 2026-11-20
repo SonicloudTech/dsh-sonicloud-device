@@ -1,0 +1,218 @@
+{
+  "version": "1.2.2",
+  "importedAt": "2026-11-20",
+  "sources": [
+    {
+      "name": "screenTool.zip",
+      "platform": "win32-x64",
+      "sha256": "39b9643b750b4a0bd34ccda31ef61cbce5265729ca04337b3e871fb7f3ad1f1f"
+    },
+    {
+      "name": "screentool.dll",
+      "platform": "win32-x64",
+      "source": "uMouseToolsDemo/electron/lib/screentool.dll",
+      "sha256": "f7a2c5f306fd001f5066b291e63e0f2be463fd084688d4c547aeb5751d42a2fe"
+    },
+    {
+      "name": "screentool-macos-1.2.2.zip",
+      "platform": "darwin-arm64",
+      "sha256": "72c9d253e0e5789e86ded113d00d07d7247cb234151dccf9baf7577a42d6ea16"
+    }
+  ],
+  "files": [
+    {
+      "path": "darwin-arm64/screentool-macos-1.2.2.zip",
+      "sha256": "7da241467ded4df1dbf59052c70c0f238c13b60de5e9f698a888e6ff7a5b52a6"
+    },
+    {
+      "path": "win32-x64/iconengines/qsvgicon.dll",
+      "sha256": "42dde60befcf1d9f96b8366a9988626b97d7d0d829ebea32f756d6ecd9ea99a8"
+    },
+    {
+      "path": "win32-x64/imageformats/qjpeg.dll",
+      "sha256": "fb4e980cb5fafa8a4cd4239329aed93f7c32ed939c94b61fb2df657f3c6ad158"
+    },
+    {
+      "path": "win32-x64/imageformats/qsvg.dll",
+      "sha256": "b3498f0a10ac4cb42cf7213db4944a34594ff36c78c50a0f249c9085d1b1ff39"
+    },
+    {
+      "path": "win32-x64/libcrypto-1_1-x64.dll",
+      "sha256": "bbba422cb9f46bf3b1b8ecbb49668eab0b7d6a01547edb6b3e34eb6c0dcfc43f"
+    },
+    {
+      "path": "win32-x64/libssl-1_1-x64.dll",
+      "sha256": "3ec048166435783dbdae066a145e6586cd87b941bd1e9a5e70a0d6b226688538"
+    },
+    {
+      "path": "win32-x64/msvcp140.dll",
+      "sha256": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9"
+    },
+    {
+      "path": "win32-x64/PixPinScrollCapture.dll",
+      "sha256": "8831ce8ed6dd7eb41d21ac3b7195fb1afbd0762caa4c30b05e263fad961f0640"
+    },
+    {
+      "path": "win32-x64/platforms/qwindows.dll",
+      "sha256": "3333ba244c97264e3bd19db5953efa80a6e47aaced9d337ac3287ec718162b85"
+    },
+    {
+      "path": "win32-x64/Qt5Core.dll",
+      "sha256": "8d2ff4ce9096ddccc4f4cd62c2e41fc854cfd1b0d6e8d296645a7f5fd4ae565a"
+    },
+    {
+      "path": "win32-x64/Qt5Gui.dll",
+      "sha256": "5e7d2d41b8b92a880e83b8cc0ca173f5da61218604186196787ee1600956be1e"
+    },
+    {
+      "path": "win32-x64/Qt5Network.dll",
+      "sha256": "4ef341ae9302e793878020f0740b09b0f31cb380408a697f75c69fdbd20fc7a1"
+    },
+    {
+      "path": "win32-x64/Qt5Svg.dll",
+      "sha256": "7348cfc6444438b8845fb3f59381227325d40ca2187d463e82fc7b8e93e38db5"
+    },
+    {
+      "path": "win32-x64/Qt5Widgets.dll",
+      "sha256": "3788c669d4b645e5a576de9fc77fca776bf516d43c89143dc2ca28291ba14358"
+    },
+    {
+      "path": "win32-x64/qwindowsvistastyle.dll",
+      "sha256": "d9b21182952682fe7ba63af1df24e23ace592c35b3f31eceef9f0eabeb5881b9"
+    },
+    {
+      "path": "win32-x64/screenhelper.exe",
+      "sha256": "f3ddba8434f807e4b53e65cd842a2d79c2e921bdcfa8de30aec389d2c4f780b8"
+    },
+    {
+      "path": "win32-x64/screentool.dll",
+      "sha256": "f7a2c5f306fd001f5066b291e63e0f2be463fd084688d4c547aeb5751d42a2fe"
+    },
+    {
+      "path": "win32-x64/vcruntime140.dll",
+      "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066"
+    },
+    {
+      "path": "win32-x64/vcruntime140_1.dll",
+      "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f"
+    }
+  ],
+  "derived": {
+    "patch": "patches/hide-cloud-actions.patch",
+    "patchSha256": "886fd6810b7c467d747d66876fa043eaafc486bf6d0fa5ed0cbfce081b9e0bf5",
+    "upstreamFiles": "patches/upstream-files.json",
+    "upstreamBinarySha256": "c0d05cc76e865c838374fd76c58675768e9e9a5dd0bc466a0c7652f43ade5bf2",
+    "output": "win32-x64/screenhelper.exe",
+    "outputSha256": "f3ddba8434f807e4b53e65cd842a2d79c2e921bdcfa8de30aec389d2c4f780b8",
+    "build": "Windows x64 / Qt 5.15.2 / MSVC 2022 / Release",
+    "tests": [
+      {
+        "name": "test_cloud_actions",
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "name": "test_helper_config",
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "derivedMacos": {
+    "patch": "patches/hide-cloud-actions.patch",
+    "patchSha256": "886fd6810b7c467d747d66876fa043eaafc486bf6d0fa5ed0cbfce081b9e0bf5",
+    "upstreamArchiveSha256": "72c9d253e0e5789e86ded113d00d07d7247cb234151dccf9baf7577a42d6ea16",
+    "output": "darwin-arm64/screentool-macos-1.2.2.zip",
+    "outputSha256": "7da241467ded4df1dbf59052c70c0f238c13b60de5e9f698a888e6ff7a5b52a6",
+    "helperSha256": "3eba261e2f25dc3173eae1198c2a5e77750f6aa16a1ea46c1f80e83e33c26a3d",
+    "preservedClientSha256": "f085323a3a17b3458b126b21c60372659022b33ebfa1e175434060d8a8a085e5",
+    "qtVersion": "6.2.4",
+    "deploymentTarget": "26.0",
+    "teamId": "F3TYM6YPF7",
+    "bundleId": "com.clawmouse.screenhelper",
+    "signingIdentitySha1": "98EE53FADB629032FF9F0E2A125CC878A20E6247",
+    "signingFlags": "0x0",
+    "sameDesignatedRequirement": true,
+    "codesignVerified": true,
+    "archiveCodesignVerified": true,
+    "notarizationPerformed": false,
+    "tests": [
+      {
+        "name": "test_cloud_actions",
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "report": "test_cloud_actions.txt"
+      },
+      {
+        "name": "test_helper_config",
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "report": "test_helper_config.txt"
+      },
+      {
+        "name": "test_mac_permissions",
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "report": "test_mac_permissions.txt"
+      }
+    ],
+    "preservedVendorRpaths": [
+      {
+        "path": "helper/screenhelper.app/Contents/Frameworks/QtSvg.framework/Versions/A/QtSvg",
+        "rpath": "/Users/qt/work/install/lib",
+        "baselineSha256": "529ce57919a34b9a1f91f54c04c63264c10a3ac5eca3aa9f192decdf6195b674",
+        "currentSha256": "529ce57919a34b9a1f91f54c04c63264c10a3ac5eca3aa9f192decdf6195b674",
+        "baselineRpaths": [
+          "@loader_path/../../../",
+          "/Users/qt/work/install/lib",
+          "@loader_path/../../../",
+          "/Users/qt/work/install/lib"
+        ],
+        "reason": "原包既有的开发机构建备用路径；文件未修改，不依赖该路径解析包内组件"
+      },
+      {
+        "path": "helper/screenhelper.app/Contents/PlugIns/iconengines/libqsvgicon.dylib",
+        "rpath": "/Users/qt/work/install/lib",
+        "baselineSha256": "f2e2ad3701f92842e1d029941e6b6112ad92cb44ff1d0a744fc9c8cb5fd21814",
+        "currentSha256": "f2e2ad3701f92842e1d029941e6b6112ad92cb44ff1d0a744fc9c8cb5fd21814",
+        "baselineRpaths": [
+          "@loader_path/../../lib",
+          "/Users/qt/work/install/lib",
+          "@loader_path/../../lib",
+          "/Users/qt/work/install/lib"
+        ],
+        "reason": "原包既有的开发机构建备用路径；文件未修改，不依赖该路径解析包内组件"
+      },
+      {
+        "path": "helper/screenhelper.app/Contents/PlugIns/imageformats/libqsvg.dylib",
+        "rpath": "/Users/qt/work/install/lib",
+        "baselineSha256": "cb66a68cd630defc3aec927749ef8700326d50d15770433e70bf7a3a9b9112b6",
+        "currentSha256": "cb66a68cd630defc3aec927749ef8700326d50d15770433e70bf7a3a9b9112b6",
+        "baselineRpaths": [
+          "@loader_path/../../lib",
+          "/Users/qt/work/install/lib",
+          "@loader_path/../../lib",
+          "/Users/qt/work/install/lib"
+        ],
+        "reason": "原包既有的开发机构建备用路径；文件未修改，不依赖该路径解析包内组件"
+      }
+    ],
+    "baseArchiveSha256": "72c9d253e0e5789e86ded113d00d07d7247cb234151dccf9baf7577a42d6ea16",
+    "appliedPatches": [
+      {
+        "path": "patches/hide-cloud-actions.patch",
+        "sha256": "886fd6810b7c467d747d66876fa043eaafc486bf6d0fa5ed0cbfce081b9e0bf5"
+      },
+      {
+        "path": "patches/mac-permissions.patch",
+        "sha256": "fe78d3d86680b0cc7d273c454f895e6dd98d6750a727621eddee90b1ad2b82a9"
+      }
+    ],
+    "permissionPreflight": true
+  }
+}

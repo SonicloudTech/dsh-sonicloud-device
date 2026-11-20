@@ -8,6 +8,53 @@ import { MemoryCredentials } from './helpers.mjs';
 import { EventEmitter } from 'node:events';
 import { TYPERT } from '../src/shared/remote.mjs';
 
+test('Gateway 截图入口调用独立服务，无需设备并在禁用时清理', async () => {
+  const ctx = new Context(), screenshot = new EventEmitter();
+  const calls = []; let closed = 0;
+  const permissionCalls = [];
+  const permissionState = { supported: true, screenRecording: false, accessibility: false, helperApp: '/cache/screenhelper.app' };
+  const typingCalls = [];
+  const typingState = { supported: true, accessibility: false, helperApp: '/cache/Sonicloud Voice.app' };
+  const desktop = { event() {}, close: async () => {}, permissions: async action => { typingCalls.push(action); return typingState; } };
+  screenshot.capture = async trigger => { calls.push(trigger); return true; };
+  screenshot.permissions = async action => { permissionCalls.push(action); return permissionState; };
+  screenshot.close = async () => { closed++; };
+  const sdk = new EventEmitter(); sdk.close = async () => {};
+  const peer = { id: 'screenshot-owner', ctx, principal: { kind: 'owner' }, signal: new AbortController().signal };
+  ctx.provide('credentials', new MemoryCredentials());
+  ctx.provide('remoteAccess', { decide: () => ({ kind: 'deny' }) });
+  try {
+    await ctx.plugin(TypertRegistry); await ctx.plugin(Gateway, {});
+    const fiber = ctx.plugin({ inject: plugin.inject, apply(scope) {
+      scope.effect(() => scope.typert.register(TYPERT));
+      new plugin.MouseController(scope, {}, { sdk, screenshot, desktop });
+    } });
+    await fiber;
+    const call = selectedPeer => ctx.typertGateway.invoke({ namespace: 'asr', method: 'captureScreenshot', args: {}, peer: selectedPeer });
+    assert.equal(await call(peer), true);
+    assert.deepEqual(calls, ['ui']);
+    await assert.rejects(call({ ...peer, principal: { kind: 'guest' } }), /access denied/);
+    assert.deepEqual(calls, ['ui']);
+    const permissions = (action, selectedPeer = peer) => ctx.typertGateway.invoke({ namespace: 'asr', method: 'screenshotPermissions', args: { action }, peer: selectedPeer });
+    for (const action of ['check', 'screen', 'accessibility', 'refresh']) assert.deepEqual(await permissions(action), permissionState);
+    assert.deepEqual(permissionCalls, ['check', 'screen', 'accessibility', 'refresh']);
+    await assert.rejects(permissions('check', { ...peer, principal: { kind: 'guest' } }), /access denied/);
+    await assert.rejects(permissions('unknown'));
+    assert.equal(permissionCalls.length, 4);
+    const typing = (action, selectedPeer = peer) => ctx.typertGateway.invoke({ namespace: 'asr', method: 'typingPermissions', args: { action }, peer: selectedPeer });
+    for (const action of ['check', 'accessibility', 'refresh']) assert.deepEqual(await typing(action), typingState);
+    assert.deepEqual(typingCalls, ['check', 'accessibility', 'refresh']);
+    await assert.rejects(typing('check', { ...peer, principal: { kind: 'guest' } }), /access denied/);
+    await assert.rejects(typing('screen'));
+    assert.equal(typingCalls.length, 3);
+    await fiber.dispose();
+    assert.equal(closed, 1);
+    assert.equal(ctx.typert.local.get('asr/captureScreenshot'), undefined);
+    assert.equal(ctx.typert.local.get('asr/screenshotPermissions'), undefined);
+    assert.equal(ctx.typert.local.get('asr/typingPermissions'), undefined);
+  } finally { await ctx.fiber.dispose(); }
+});
+
 test('Harness 0.2.1-rc.5 Gateway dispatches plugin, validates inputs and removes routes on disable', async () => {
   const ctx = new Context();
   const peer = { id: 'test-owner', ctx, principal: { kind: 'owner' }, signal: new AbortController().signal };

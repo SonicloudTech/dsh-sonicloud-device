@@ -16,7 +16,11 @@ test('built client hides shared services, edits per-device preferences, and disp
   globalThis.window = dom.window; globalThis.document = dom.window.document; globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const registrations = new Map(); const cleanups = []; let remoteDisposed = false;
   const store = new ServiceStore(new MemoryCredentials());
-  let catalogCalls = 0;
+  let catalogCalls = 0, screenshotCalls = 0, finishScreenshot;
+  const permissionCalls = [];
+  let screenshotPermissions = { supported: false, screenRecording: true, accessibility: true, helperApp: '' };
+  const typingPermissionCalls = [];
+  let typingPermissions = { supported: false, accessibility: true, helperApp: '' };
   const events = new AsyncItems();
   const deviceStore = new DeviceStore(new MemoryCredentials());
   let connectedDevices = [];
@@ -28,6 +32,9 @@ test('built client hides shared services, edits per-device preferences, and disp
   };
   const api = {
     watch: () => events,
+    captureScreenshot: () => { screenshotCalls++; return new Promise(resolve => { finishScreenshot = resolve; }); },
+    screenshotPermissions: async action => { permissionCalls.push(action); return { ok: true, value: { ...screenshotPermissions } }; },
+    typingPermissions: async action => { typingPermissionCalls.push(action); return { ok: true, value: { ...typingPermissions } }; },
     saveDevice: async (sn, revision, preferences) => {
       const saved = await deviceStore.save(sn, revision, preferences);
       connectedDevices = connectedDevices.map(device => device.sn === sn ? { ...device, ...saved } : device); events.push(devicesEvent());
@@ -83,7 +90,7 @@ test('built client hides shared services, edits per-device preferences, and disp
   };
   const scope = makeScope();
   const ctx = {
-    remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 8); return () => { remoteDisposed = true; }; } },
+    remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 11); return () => { remoteDisposed = true; }; } },
     inject: (services, callback) => { callback(scope); return { dispose: async () => { for (const cleanup of cleanups) await cleanup(); } }; },
   };
   const dispose = await plugin.apply(ctx);
@@ -104,6 +111,48 @@ test('built client hides shared services, edits per-device preferences, and disp
     await act(async () => overlayRoot.render(React.createElement(overlay.component, overlay.options.inject())));
     await act(async () => root.render(React.createElement(settings.component, { ...settings.options.inject() })));
     assert.match(dom.window.document.body.textContent, /暂无设备连接/);
+    const screenshotButton = () => dom.window.document.querySelector('[aria-label="开始截图"]');
+    await act(async () => screenshotButton().click());
+    assert.equal(screenshotCalls, 1);
+    assert.equal(screenshotButton().disabled, true);
+    await act(async () => screenshotButton().click());
+    assert.equal(screenshotCalls, 1);
+    await act(async () => finishScreenshot({ ok: true, value: true }));
+    assert.equal(screenshotButton().disabled, false);
+    const permissionController = settings.options.inject().controller;
+    typingPermissions = { supported: true, accessibility: false, helperApp: '/cache/Sonicloud Voice.app' };
+    await act(async () => permissionController.refreshTypingPermissions());
+    assert.match(dom.window.document.querySelector('[aria-label="打字上屏权限"]').textContent, /Sonicloud Voice.*待授权/s);
+    assert.equal(screenshotButton().disabled, false);
+    await act(async () => dom.window.document.querySelector('[aria-label="授权打字辅助功能"]').click());
+    assert.equal(typingPermissionCalls.at(-1), 'accessibility');
+    assert.match(dom.window.document.querySelector('[aria-label="打字上屏权限"]').textContent, /仍可识别并复制文字/);
+    typingPermissions.accessibility = true;
+    await act(async () => dom.window.document.querySelector('[aria-label="重新检查打字权限"]').click());
+    assert.equal(typingPermissionCalls.at(-1), 'refresh');
+    assert.equal(dom.window.document.querySelector('[aria-label="授权打字辅助功能"]'), null);
+    screenshotPermissions = { supported: true, screenRecording: false, accessibility: false, helperApp: '/cache/screenhelper.app' };
+    await act(async () => permissionController.refreshScreenshotPermissions());
+    assert.equal(screenshotButton().disabled, true);
+    assert.match(dom.window.document.querySelector('[aria-label="截图权限"]').textContent, /screenhelper.*屏幕录制：待授权/s);
+    await act(async () => dom.window.document.querySelector('[aria-label="授权屏幕录制"]').click());
+    assert.equal(permissionCalls.at(-1), 'screen');
+    assert.equal(screenshotButton().disabled, true);
+    assert.match(dom.window.document.querySelector('[aria-label="截图权限"]').textContent, /系统弹窗/);
+    screenshotPermissions.screenRecording = true;
+    await act(async () => dom.window.document.querySelector('[aria-label="重新检查截图权限"]').click());
+    assert.equal(permissionCalls.at(-1), 'refresh');
+    assert.equal(screenshotButton().disabled, false);
+    assert.equal(dom.window.document.querySelector('[aria-label="授权屏幕录制"]'), null);
+    await act(async () => dom.window.document.querySelector('[aria-label="授权辅助功能"]').click());
+    assert.equal(permissionCalls.at(-1), 'accessibility');
+    assert.equal(screenshotButton().disabled, false);
+    screenshotPermissions = { supported: false, screenRecording: true, accessibility: true, helperApp: '' };
+    await act(async () => permissionController.refreshScreenshotPermissions());
+    assert.equal(dom.window.document.querySelector('[aria-label="截图权限"]'), null);
+    typingPermissions = { supported: false, accessibility: true, helperApp: '' };
+    await act(async () => permissionController.refreshTypingPermissions());
+    assert.equal(dom.window.document.querySelector('[aria-label="打字上屏权限"]'), null);
     assert.doesNotMatch(dom.window.document.body.textContent, /共享语音服务|语音服务 ·|声云 ASR|添加 ASR 服务/);
     const sidebarSwitch = () => dom.window.document.querySelector('[aria-label="侧边栏"]');
     assert.equal(sidebarSwitch().getAttribute('aria-checked'), 'true');

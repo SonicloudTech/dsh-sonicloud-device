@@ -1,0 +1,202 @@
+--- a/core/screen_tool_bar.cpp
++++ b/core/screen_tool_bar.cpp
+@@ -111,9 +111,9 @@
+     layout->addWidget(m_pExit);
+     layout->addWidget(m_pOk);
+ 
+-    // [HELPER-IPC] OCR 按钮显隐由 set_config 下发（原渠道宏语义）
+-    if (!HelperConfig::instance().ocrVisible())
+-        m_pOCR->hide();
++    // 未接入的云功能同时隐藏入口；滚动截图保持可用。
++    m_pOCR->setVisible(HelperConfig::instance().ocrVisible());
++    m_pTrans->setVisible(HelperConfig::instance().transEnabled());
+ 
+     // [M4] 底板样式出自主题模板（颜色/圆角 token 化；原内联 qss 已收敛）
+     this->setStyleSheet(ThemeManager::instance().dialogCardQss());
+@@ -459,11 +459,13 @@
+     m_pCancel->setVisible(!m_pinEditMode);
+     m_scrollCapture->setVisible(!m_pinEditMode);
+     // [R6-UI] 编辑会话先隐藏 翻译/OCR（功能保留，仅不可见；后续按用户指示恢复）
+-    m_pTrans->setVisible(!m_pinEditMode);
++    m_pTrans->setVisible(!m_pinEditMode && HelperConfig::instance().transEnabled());
+     m_pOCR->setVisible(!m_pinEditMode && HelperConfig::instance().ocrVisible());
+     // [R5-ZOOM] 缩放控件仅编辑会话可见；宽度按可见按钮数自适应
+     m_btnZoom->setVisible(m_pinEditMode);
+-    const int buttons = m_pinEditMode ? 14 : 18;
++    const int buttons = m_pinEditMode ? 14 : 16
++        + int(HelperConfig::instance().transEnabled())
++        + int(HelperConfig::instance().ocrVisible());
+     setFixedSize((FixedWidth + 16) * buttons, FixedHeight + 20);
+     // [R3-#4] 编辑模式语义换装：✔=完成编辑(盖章)、✗=取消编辑——沿用截图会话的
+     // "完成截图/退出截图"文案会让用户以为按钮无效（功能本身已分别接 confirmPinEdit/
+--- a/core/screen_label.h
++++ b/core/screen_label.h
+@@ -47,6 +47,7 @@
+ // class ScreenLabel : public QLabel
+ class ScreenLabel : public QLabel
+ {
++    friend class TestCloudActions;
+     Q_OBJECT
+     class AddItemCommand : public QUndoCommand
+     {
+@@ -169,6 +170,7 @@
+     bool eventFilter(QObject *obj, QEvent *event) override;
+ private:
+     void initScrollCapture();
++    void refreshScrollActions();
+     void initConnectTool();
+     void showToolBar();
+     // [R3-#3] 贴图编辑模式：工具条切换为独立置顶小窗（贴窗边+跟随）/还原为子部件
+--- a/core/screen_label.cpp
++++ b/core/screen_label.cpp
+@@ -906,19 +906,32 @@
+ void ScreenLabel::initScrollCapture()
+ {
+ #ifdef ENABLE_PIXPIN_SCROLL_CAPTURE
+-    PixPinScrollCapture::Action ocrAction;
+-    ocrAction.name = "OCR";
+-    ocrAction.iconPath = ":/scroll_ocr.png";
+-    QString ocrTipKey = "OCR";
+-    ocrAction.tip = ocrTipKey.isEmpty() ? ocrAction.name : ocrTipKey;
+-    ocrAction.closeAfterTrigger = true;
+-    m_scrollCaptureParams.actions.append(ocrAction);
++    refreshScrollActions();
+     m_scrollCaptureParams.hideMoveButton = true;
+     // [MAC-RESET-20260920] 回归官方 demo 集成：hideCaptureBorder 不再强制
+     // true（demo 默认 false），滚动驱动/窗口干预等全部摘除，行为与官方
+     // demo 对齐——先在基线上确认"拼接/成图能用"，渲染类问题（黑窗）作为
+     // 独立问题单独处理（MACOS_PORT.md 第十七节）
+     connect(m_pScreenToolBar, &ScreenToolBar::signalScrollCapture, this, &ScreenLabel::onScrollCaptureTriggered);
++#endif
++}
++
++void ScreenLabel::refreshScrollActions()
++{
++#ifdef ENABLE_PIXPIN_SCROLL_CAPTURE
++    // 读取本次配置，避免复用 helper 后遗留上一次的云端 OCR/Word 入口。
++    for (int i = m_scrollCaptureParams.actions.size() - 1; i >= 0; --i)
++        if (m_scrollCaptureParams.actions[i].name == QLatin1String("OCR"))
++            m_scrollCaptureParams.actions.removeAt(i);
++    if (HelperConfig::instance().ocrVisible())
++    {
++        PixPinScrollCapture::Action action;
++        action.name = "OCR";
++        action.iconPath = ":/scroll_ocr.png";
++        action.tip = "OCR";
++        action.closeAfterTrigger = true;
++        m_scrollCaptureParams.actions.append(action);
++    }
+ #endif
+ }
+ 
+@@ -1583,6 +1596,7 @@
+     restoreScrollWindows();
+     for (QWidget* w : QApplication::topLevelWidgets()) m_scrollExistingWindows.append(w);
+ #endif
++    refreshScrollActions();
+     PixPinScrollCapture* inst = PixPinScrollCapture::createInstance(m_scrollCaptureParams, this);
+     if (inst)
+     {
+--- a/ipc/helper_gateway.cpp
++++ b/ipc/helper_gateway.cpp
+@@ -446,6 +446,9 @@
+ 
+ void HelperGateway::onConvertImage(const QImage& img)
+ {
++    // 配置关闭 OCR 时也禁止陈旧滚动动作启动云端 Word 转换。
++    if (!HelperConfig::instance().ocrVisible())
++        return;
+     // 既有事件：图像交宿主（留档/宿主自行处理），协议不变
+     sendEvent(QJsonObject{{"type", "ocr_requested"},
+                           {"source", QStringLiteral("scroll")}},
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -257,6 +257,12 @@
+     add_executable(test_helper_config tests/test_helper_config.cpp)
+     target_link_libraries(test_helper_config PRIVATE ${QT_LINK}::Test screentool_core)
+     add_test(NAME helper_config COMMAND test_helper_config)
++    if(TARGET PixPinScrollCapture)
++        add_executable(test_cloud_actions tests/test_cloud_actions.cpp)
++        target_link_libraries(test_cloud_actions PRIVATE ${QT_LINK}::Test ${QT_LINK}::Widgets screentool_core)
++        target_sources(test_cloud_actions PRIVATE res/themes/themes.qrc res/qrc/icons.qrc)
++        add_test(NAME cloud_actions COMMAND test_cloud_actions)
++    endif()
+     add_executable(test_word_convert tests/test_word_convert.cpp)
+     target_link_libraries(test_word_convert PRIVATE ${QT_LINK}::Test screentool_core)
+     add_test(NAME word_convert COMMAND test_word_convert)
+--- /dev/null
++++ b/tests/test_cloud_actions.cpp
+@@ -0,0 +1,73 @@
++#include <QtTest/QtTest>
++#include <QtWidgets>
++#include <PixPinScrollCapture.h>
++#include "../core/screen_label.h"
++#include "../core/helper_config.h"
++
++class TestCloudActions : public QObject
++{
++    Q_OBJECT
++private slots:
++    void hideUnsupportedActionsAndKeepScroll();
++    void refreshWordActionFromCurrentConfig();
++};
++
++static QPushButton* button(ScreenToolBar& bar, const QString& tip)
++{
++    for (auto* candidate : bar.findChildren<QPushButton*>())
++        if (candidate->toolTip() == tip) return candidate;
++    return nullptr;
++}
++
++void TestCloudActions::hideUnsupportedActionsAndKeepScroll()
++{
++    HelperConfig::instance().apply(QJsonObject{{"ocr_visible", false}, {"trans_enabled", false}});
++    ScreenToolBar bar;
++    bar.initBar();
++    auto* ocr = button(bar, QStringLiteral("OCR"));
++    auto* translate = button(bar, QStringLiteral("Translate"));
++    auto* scroll = button(bar, QStringLiteral("Scroll screenshot"));
++    QVERIFY(ocr && translate && scroll);
++    QVERIFY(ocr->isHidden());
++    QVERIFY(translate->isHidden());
++    QVERIFY(!scroll->isHidden());
++    const int hiddenWidth = bar.width();
++    bar.setPinEditMode(true);
++    bar.setPinEditMode(false);
++    QVERIFY(translate->isHidden());
++    QVERIFY(ocr->isHidden());
++    QVERIFY(!scroll->isHidden());
++    HelperConfig::instance().apply(QJsonObject{{"ocr_visible", true}, {"trans_enabled", true}});
++    bar.initBar();
++    QVERIFY(!ocr->isHidden());
++    QVERIFY(!translate->isHidden());
++    QCOMPARE(bar.width() - hiddenWidth, 96);
++}
++
++void TestCloudActions::refreshWordActionFromCurrentConfig()
++{
++    HelperConfig::instance().apply(QJsonObject{{"ocr_visible", true}});
++    ScreenLabel label;
++    auto count = [&label](const QString& name) {
++        int count = 0;
++        for (const auto& action : label.m_scrollCaptureParams.actions)
++            if (action.name == name) ++count;
++        return count;
++    };
++    QCOMPARE(count(QStringLiteral("OCR")), 1);
++    PixPinScrollCapture::Action copy;
++    copy.name = "copy";
++    label.m_scrollCaptureParams.actions.append(copy);
++    HelperConfig::instance().apply(QJsonObject{{"ocr_visible", false}});
++    label.refreshScrollActions();
++    QCOMPARE(count(QStringLiteral("OCR")), 0);
++    QCOMPARE(count(QStringLiteral("copy")), 1);
++    HelperConfig::instance().apply(QJsonObject{{"ocr_visible", true}});
++    label.refreshScrollActions();
++    label.refreshScrollActions();
++    QCOMPARE(count(QStringLiteral("OCR")), 1);
++    QCOMPARE(count(QStringLiteral("copy")), 1);
++}
++
++QTEST_MAIN(TestCloudActions)
++#include "test_cloud_actions.moc"

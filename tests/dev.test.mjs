@@ -57,6 +57,8 @@ test('development generation reloads nested Host code and only publishes Client 
     assert.equal(await readFile(join(first.generation, 'native/fixture.txt'), 'utf8'), 'native-generation-1');
     assert.match(await readFile(join(runtime, 'host.mjs'), 'utf8'), /src\/devices\/native\.mjs/);
     assert.match(await readFile(join(runtime, 'host.mjs'), 'utf8'), /src\/desktop\/presentation\.mjs/);
+    assert.match(await readFile(join(runtime, 'host.mjs'), 'utf8'), /src\/desktop\/screenshot\.mjs/);
+    assert.match(await readFile(join(second.generation, 'src/desktop/screenshot-worker.mjs'), 'utf8'), /sct_start_capture/);
   } finally { await ctx.fiber.dispose(); }
 });
 
@@ -65,7 +67,7 @@ test('failed client, Host and worker builds leave committed generation intact', 
   const good = await prepareBuild(root, runtime); await good.publish();
   const host = await readFile(join(runtime, 'host.mjs'), 'utf8');
   const client = await readFile(join(runtime, 'dist/client.js'), 'utf8');
-  for (const relative of ['src/client/index.jsx', 'src/host/index.mjs', 'src/devices/native-worker.mjs']) {
+  for (const relative of ['src/client/index.jsx', 'src/host/index.mjs', 'src/devices/native-worker.mjs', 'src/desktop/screenshot-worker.mjs']) {
     const path = join(root, relative), original = await readFile(path, 'utf8');
     await writeFile(path, 'export const broken = ;');
     await assert.rejects(prepareBuild(root, runtime));
@@ -105,5 +107,24 @@ test('watch command rebuilds on save, survives syntax errors and releases its lo
     await waitFor(async () => (await readFile(join(runtime, 'host.mjs'), 'utf8')).includes('watch-recovered'));
     assert.equal((output.match(/构建成功/g) ?? []).length, 2);
   } finally { child.kill('SIGTERM'); await exited; }
+  if (process.platform === 'win32') {
+    // Windows 的 kill(SIGTERM) 是强制终止；锁由下一次启动按失效 PID 接管。
+    assert.equal(Number(await readFile(join(runtime, 'watch.lock'), 'utf8')), child.pid);
+    assert.throws(() => process.kill(child.pid, 0), { code: 'ESRCH' });
+    const recovery = spawn(process.execPath, [join(root, 'scripts/dev.mjs'), '--once'], {
+      cwd: root, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    });
+    let recoveredOutput = '';
+    recovery.stdout.on('data', data => { recoveredOutput += data; });
+    recovery.stderr.on('data', data => { recoveredOutput += data; });
+    try {
+      const [code] = await once(recovery, 'exit');
+      assert.equal(code, 0, recoveredOutput);
+      assert.match(recoveredOutput, /构建成功/);
+      assert.match(recoveredOutput, /监听已停止/);
+    } finally {
+      if (recovery.exitCode === null && recovery.signalCode === null) recovery.kill();
+    }
+  }
   await assert.rejects(readFile(join(runtime, 'watch.lock')), { code: 'ENOENT' });
 });

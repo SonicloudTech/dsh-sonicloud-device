@@ -7,6 +7,7 @@ import { TYPERT } from '../shared/remote.mjs';
 import { DeviceManager } from '../devices/manager.mjs';
 import { MouseSdk } from '../devices/native.mjs';
 import { DesktopPresentation } from '../desktop/presentation.mjs';
+import { ScreenshotService } from '../desktop/screenshot.mjs';
 import { pluginConfigSchema } from '../devices/config.mjs';
 import { AiConversationBridge } from './ai-conversation.mjs';
 
@@ -34,6 +35,9 @@ export class MouseController extends TypertRemoteService {
   async service() { await this.initialized; return { ...await this.store.resolve(), ...this.dependencies.endpoints }; }
   catalog() { return this.store.catalog(); }
   devices() { return this.manager.view(); }
+  captureScreenshot() { return this.manager.captureScreenshot(); }
+  screenshotPermissions(action) { return this.manager.screenshotPermissions(action); }
+  typingPermissions(action) { return this.manager.typingPermissions(action); }
   saveDevice(sn, revision, preferences) { return this.manager.save(sn, revision, preferences); }
   watch(clientId, signal) { return this.manager.watch(clientId, signal); }
   accept(clientId, sessionId) { return this.manager.accept(clientId, sessionId); }
@@ -90,7 +94,7 @@ export class MouseController extends TypertRemoteService {
 }
 export async function apply(ctx, config = {}) {
   ctx.effect(() => ctx.typert.register(TYPERT));
-  const controller = new MouseController(ctx, config, { desktop: new DesktopPresentation() });
+  const controller = new MouseController(ctx, config, { desktop: new DesktopPresentation(), screenshot: new ScreenshotService() });
   await controller.initialized;
   void controller.manager.start();
 }

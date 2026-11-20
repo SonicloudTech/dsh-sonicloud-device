@@ -21,6 +21,8 @@ Supports Apple silicon Macs and Windows x64. The plugin identifies your mouse an
 3. Enter **@sonicloud/dsh-sonicloud-device** and click **Install (安装)**.
 4. Once installed, enable the plugin and open **Settings → Sonicloud Devices (设置 → 声云设备)** to view and configure your mouse.
 
+On macOS, initial activation and reconnection check typing and screenshot permissions. Sonicloud Devices keeps the setup guidance available; see [first-time permissions](#first-time-permissions-on-macos).
+
 ![Add the plugin in Harness by entering @sonicloud/dsh-sonicloud-device and clicking Install](docs/images/plugin-install.png)
 
 ## Features
@@ -31,6 +33,7 @@ Supports Apple silicon Macs and Windows x64. The plugin identifies your mouse an
 | Voice translation | Choose source and target languages and assign Voice Translation to the voice or M button. Hold to speak, then release to insert the translation |
 | Voice search | Assign Voice Search to the M button and choose Baidu, Bing, or Google. Speak your query and release to search |
 | AI conversations | Hold the AI button to speak, then release to fill a Harness conversation. Auto-send is enabled by default and can be turned off in settings |
+| Screenshots | Press the mouse capture button or click Start Screenshot in Sonicloud Devices, then select a region to annotate, copy, save, pin, or capture scrolling content |
 | Buttons and sensitivity | Assign Enter, Backspace, Open Link, or other actions to the M button, and adjust mouse DPI |
 | Multiple mice | View each mouse's connection, battery level, and serial number, and save its language, button, and sensitivity settings separately |
 
@@ -39,6 +42,20 @@ Manage these options in **Settings → Sonicloud Devices (设置 → 声云设�
 ![Sonicloud Devices settings showing mouse information, voice typing, translation, and DPI options](docs/images/sonicloud-device.png)
 
 ## Getting started
+
+### First-time permissions on macOS
+
+After enabling the plugin, open **Sonicloud Devices (声云设备)** and grant the permissions you need:
+
+| Component | Permission and purpose |
+| --- | --- |
+| Sonicloud Voice | Accessibility: insert recognized text into desktop apps; recognition and copying remain available without it |
+| screenhelper | Screen Recording: required for screenshots; the capture overlay stays closed until permission is granted |
+| screenhelper | Accessibility: optional for automatic scrolling; regular screenshots and manual scrolling remain available |
+
+Click the corresponding **Authorize (授权)** button to let that component request permission. Confirm manually in the system prompt or **System Settings → Privacy & Security**, then click **Authorized, Check Again (已授权，重新检查)**. If a component is missing from the list, expand its location in the page and add it by that path. The plugin checks and guides setup; it never confirms system permissions for you.
+
+Sonicloud Voice now uses a Developer ID signature. If an older version is already checked but the plugin still reports missing permission, follow the system prompts to authorize it again and restart Harness, then recheck.
 
 ### Voice typing and translation
 
@@ -51,7 +68,7 @@ Audio comes from the mouse. Recognized text and processing status appear in a se
 
 Keep the target window, document, and input position unchanged during recording, and avoid typing, clicking, or scrolling. If the target changes or the app does not support automatic insertion, the overlay keeps the result available to copy. If translation fails, you can copy the recognized source text.
 
-On macOS, automatic insertion requires allowing **Sonicloud Voice** under **System Settings → Privacy & Security → Accessibility**. Recognition and copying still work without this permission. Insertion temporarily uses the clipboard, then restores its previous contents while preserving anything newly copied in the meantime.
+For macOS insertion permissions, see [first-time permissions](#first-time-permissions-on-macos). Insertion temporarily uses the clipboard, then restores its previous contents while preserving anything newly copied in the meantime.
 
 On Windows, recognized text is typed live into the focused field character by character through the typer injection library, with automatic corrections while you speak; translation types only the final translated text. Character injection never touches the clipboard. Password fields and windows that reject simulated input (for example, elevated apps) keep the result available to copy instead.
 
@@ -64,6 +81,12 @@ With **Auto-send (自动发送)** enabled, the complete draft and attachments ar
 ### Search and Open Link
 
 Voice search uses the current mouse's recognition language and selected search engine. For **Open Link (一键链接)**, enter a URL and click **Confirm (确认)**; you can omit `https://` or `http://`. Searching and opening links do not require a focused input field. Non-voice M button actions run when you release the button.
+
+### Screenshots
+
+Press the mouse capture button or click **Start Screenshot (开始截图)** at the bottom of **Sonicloud Devices (声云设备)**, then select a region in the separate capture UI. The capture process is bundled. The UI button also works without a connected mouse. Repeated triggers while capturing report that a capture is already in progress. Press `Esc` to leave region selection. Disabling the plugin or quitting Harness closes the capture process and pinned image windows.
+
+On macOS, complete [first-time permissions](#first-time-permissions-on-macos) before taking a screenshot. Cloud service integration for OCR, image translation, and Word export is outside this integration.
 
 ## Update or uninstall
 

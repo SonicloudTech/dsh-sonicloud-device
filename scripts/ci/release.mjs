@@ -100,13 +100,13 @@ export async function verifyBundle(directory, expected) {
 export async function inspectTarball(filename, expected) {
   // npm 自己生成的包也检查目录与类型，避免意外带入链接或开发文件。
   const { stdout: listing } = await run('tar', ['-tzf', filename], { maxBuffer: 8 * 1024 * 1024 });
-  const entries = listing.trim().split('\n');
+  const entries = listing.trim().split(/\r?\n/);
   assert.ok(entries.every(path => path.startsWith('package/')), 'tar 包必须以 package/ 为根');
   assert.ok(entries.every(path => !path.split('/').includes('..') && !path.includes('\\')), 'tar 包包含目录穿越路径');
   const files = entries.filter(path => !path.endsWith('/')).map(path => path.slice(8));
   validateFileList(files);
   const { stdout: verbose } = await run('tar', ['-tvzf', filename], { maxBuffer: 8 * 1024 * 1024 });
-  assert.ok(verbose.trim().split('\n').every(line => ['-', 'd'].includes(line[0])), 'tar 包不允许符号链接、硬链接或特殊文件');
+  assert.ok(verbose.trim().split(/\r?\n/).every(line => ['-', 'd'].includes(line[0])), 'tar 包不允许符号链接、硬链接或特殊文件');
   const temporary = await mkdtemp(join(tmpdir(), 'sonicloud-pack-'));
   try {
     await run('tar', ['-xzf', resolve(filename), '-C', temporary]);
