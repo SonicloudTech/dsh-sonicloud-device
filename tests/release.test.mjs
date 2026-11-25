@@ -33,28 +33,42 @@ test('发布版本、测试版本及触发上下文有严格边界', () => {
 
 test('双语日志核对全部章节、日期、分类与条目数量并选择本次说明', () => {
   const [zh, en] = logs();
-  assert.match(releaseNotes(zh, en, '0.1.0', 'dev'), /中文变更/);
-  assert.match(releaseNotes(zh, en, '0.1.0', 'main'), /中文修复/);
+  assert.equal(releaseNotes(zh, en), '### 新增\n- 中文变更');
   for (const changed of [en.replace('2026-11-09', '2026-11-08'), en.replace('### Fixed', '### Added'),
     en.replace('- English fix', '- First\n- Second'), en.replace('## Unreleased', '## Pending'),
-    en.replace('2026-11-09', '2026-02-30')]) assert.throws(() => releaseNotes(zh, changed, '0.1.0', 'main'));
-  assert.throws(() => releaseNotes(...logs('', ''), '0.1.0', 'dev'));
-  assert.match(releaseNotes(zh, en, '0.2.0', 'main'), /中文变更/);
-  assert.throws(() => releaseNotes(...logs('', ''), '0.2.0', 'main'));
-  assert.throws(() => releaseNotes(zh.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [已撤回]'),
-    en.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [YANKED]'), '0.1.0', 'main'));
+    en.replace('2026-11-09', '2026-02-30')]) assert.throws(() => releaseNotes(zh, changed));
+  assert.throws(() => releaseNotes(...logs('', '')), /省略没有条目/);
+  assert.throws(() => releaseNotes('# 更新日志\n\n## 未发布\n', '# Changelog\n\n## Unreleased\n'), /缺少本次变更说明/);
 });
 
-test('完全折叠的更新日志在 main 采用版本章节，dev 仍要求未发布章节', () => {
+test('读取顶部最新非空章节，兼容空未发布章节和仅版本章节', () => {
   const [zh, en] = logs();
   const foldedZh = zh.replace('## 未发布\n\n### 新增\n- 中文变更\n\n', '');
   const foldedEn = en.replace('## Unreleased\n\n### Added\n- English change\n\n', '');
-  assert.match(releaseNotes(foldedZh, foldedEn, '0.1.0', 'main'), /中文修复/);
-  assert.throws(() => releaseNotes(foldedZh, foldedEn, '0.1.0', 'dev'), /缺少本次变更说明/);
-  assert.throws(() => releaseNotes(foldedZh, foldedEn, '0.2.0', 'main'), /缺少本次变更说明/);
+  const emptyZh = zh.replace('### 新增\n- 中文变更\n\n', '');
+  const emptyEn = en.replace('### Added\n- English change\n\n', '');
+  for (const [chinese, english] of [[foldedZh, foldedEn], [emptyZh, emptyEn]]) {
+    assert.equal(releaseNotes(chinese, english), '### 修复\n- 中文修复');
+    assert.throws(() => releaseNotes(
+      chinese.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [已撤回]'),
+      english.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [YANKED]')), /版本已撤回/);
+    assert.equal(releaseNotes(
+      chinese.replace('## 0.1.0', '## 0.2.0 - 2026-11-25\n\n## 0.1.0'),
+      english.replace('## 0.1.0', '## 0.2.0 - 2026-11-25\n\n## 0.1.0')), '### 修复\n- 中文修复');
+  }
+  for (const prefix of ['', '## 未发布\n\n']) {
+    const versionedZh = zh.replace('## 未发布', `${prefix}## 0.2.0 - 2026-11-25`);
+    const versionedEn = en.replace('## Unreleased', `${prefix.replace('未发布', 'Unreleased')}## 0.2.0 - 2026-11-25`);
+    assert.equal(releaseNotes(versionedZh, versionedEn), '### 新增\n- 中文变更');
+    assert.throws(() => releaseNotes(
+      versionedZh.replace('0.2.0 - 2026-11-25', '0.2.0 - 2026-11-25 [已撤回]'),
+      versionedEn.replace('0.2.0 - 2026-11-25', '0.2.0 - 2026-11-25 [YANKED]')), /版本已撤回/);
+    assert.throws(() => releaseNotes(
+      versionedZh.replace('0.2.0', '0.0.9'), versionedEn.replace('0.2.0', '0.0.9')), /倒序排列/);
+  }
   const swappedZh = zh.replace('## 未发布\n\n### 新增\n- 中文变更\n\n## 0.1.0 - 2026-11-09',
     '## 0.1.0 - 2026-11-09\n\n### 修复\n- 临时条目\n\n## 未发布\n\n### 新增\n- 中文变更\n\n## 0.0.9 - 2026-11-08');
-  assert.throws(() => releaseNotes(swappedZh, en, '0.1.0', 'main'), /未发布章节必须置顶/);
+  assert.throws(() => releaseNotes(swappedZh, en), /未发布章节必须置顶/);
 });
 
 test('新版本可发布，重复版本只能使用同次运行且完整性一致的恢复记录', () => {
@@ -156,6 +170,39 @@ test('等待 npm 异步处理，但完整性错误立即失败且不会重复发
     readMetadata: async () => metadata(), verify: async () => { throw new Error('integrity mismatch'); },
     pause: async () => assert.fail('完整性错误不应等待重试'),
   }), /integrity mismatch/);
+});
+
+test('dev 和 main 初始化均读取最新变更，不依赖包版本或未发布标题', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'sonicloud-latest-notes-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+  const lock = JSON.parse(await readFile('package-lock.json', 'utf8'));
+  const [zh, en] = logs();
+  const cases = [
+    [zh, en],
+    [zh.replace('## 未发布', '## 未发布\n\n## 0.2.0 - 2026-11-25'),
+      en.replace('## Unreleased', '## Unreleased\n\n## 0.2.0 - 2026-11-25')],
+    [zh.replace('## 未发布', '## 0.2.0 - 2026-11-25'),
+      en.replace('## Unreleased', '## 0.2.0 - 2026-11-25')],
+  ];
+  for (const branch of ['dev', 'main']) {
+    // 覆盖包版本指向旧章节和日志中没有对应包版本章节的情况。
+    for (const version of ['0.1.0', '0.3.0']) {
+      for (const [chinese, english] of cases) {
+        pkg.version = lock.version = lock.packages[''].version = version;
+        await writeFile(join(directory, 'package.json'), JSON.stringify(pkg));
+        await writeFile(join(directory, 'package-lock.json'), JSON.stringify(lock));
+        await writeFile(join(directory, 'CHANGELOG.zh.md'), chinese);
+        await writeFile(join(directory, 'CHANGELOG.md'), english);
+        await run(process.execPath, [resolve('scripts/ci/release.mjs'), 'init'], {
+          cwd: directory, env: { ...process.env, ...env, GITHUB_REF: `refs/heads/${branch}`, GITHUB_OUTPUT: join(directory, 'outputs') },
+        });
+        const state = JSON.parse(await readFile(join(directory, 'work/release-state.json'), 'utf8'));
+        assert.equal(state.notes, '### 新增\n- 中文变更');
+        assert.equal(state.version, branch === 'dev' ? `${version}-dev.4.2` : version);
+      }
+    }
+  }
 });
 
 test('init 在独立工作副本生成测试版本，保持源码日志不变', async t => {

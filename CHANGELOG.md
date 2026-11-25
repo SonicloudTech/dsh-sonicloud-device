@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Read CI release notes from the latest non-empty changelog section on every branch, whether Unreleased or a numbered version, independently of the branch or package version.
+
+## 0.1.3 - 2026-11-20
+
 ### Added
 
 - Check macOS typing and screenshot permissions on initial activation and reconnection, with separate Sonicloud Voice and screenhelper authorization and recheck guidance in Sonicloud Devices; system permission confirmation remains manual.

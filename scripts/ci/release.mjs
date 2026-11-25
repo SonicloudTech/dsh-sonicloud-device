@@ -52,7 +52,7 @@ async function initialize() {
   const ctx = context();
   const pkg = await json('package.json'), lock = await json('package-lock.json');
   validateManifest(pkg, lock);
-  const notes = releaseNotes(await readFile('CHANGELOG.zh.md', 'utf8'), await readFile('CHANGELOG.md', 'utf8'), pkg.version, ctx.branch);
+  const notes = releaseNotes(await readFile('CHANGELOG.zh.md', 'utf8'), await readFile('CHANGELOG.md', 'utf8'));
   const version = ctx.branch === 'dev' ? developmentVersion(pkg.version, ctx.runNumber, ctx.attempt) : pkg.version;
   const state = { ...ctx, name: pkg.name, version, notes,
     artifactName: ctx.branch === 'main' ? `release-${ctx.runId}` : `dev-${ctx.runId}-${ctx.attempt}` };
@@ -219,7 +219,7 @@ export async function summary(env = process.env) {
     try { state = await json(join(artifactDir, 'release.json')); } catch { /* 无已检查产物。 */ }
   }
   if (state) lines.push(`版本：\`${state.name}@${state.version}\``,
-    `### ${ctx.branch === 'dev' ? '本轮累计变更' : '本版本变更'}`, `<pre>${escapeHtml(state.notes)}</pre>`);
+    '### 最新变更', `<pre>${escapeHtml(state.notes)}</pre>`);
   if (env.ARTIFACT_URL && /^https:\/\/github\.com\/SonicloudTech\/dsh-sonicloud-device\/actions\/runs\/\d+\/artifacts\/\d+$/.test(env.ARTIFACT_URL)) {
     lines.push(`[下载已检查产物](${env.ARTIFACT_URL})（上传后保留 30 天；重跑不延长保留期；需登录 GitHub，下载后解压外层归档获取 .tgz）。`);
     try { const record = await json(join(artifactDir, 'release.json')); lines.push(`SHA-256：\`${record.sha256}\``); } catch { /* 仅有原产物链接。 */ }

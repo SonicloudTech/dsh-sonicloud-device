@@ -59,21 +59,19 @@ export function parseChangelog(text, language) {
   }
   if (sections.some(section => section.version === 'Unreleased'))
     assert.equal(sections[0]?.version, 'Unreleased', '未发布章节必须置顶');
-  for (let i = 2; i < sections.length; i++) {
+  for (let i = sections[0]?.version === 'Unreleased' ? 2 : 1; i < sections.length; i++) {
     assert.ok(compareVersions(sections[i - 1].version, sections[i].version) > 0, '已发布版本须按倒序排列');
   }
   return sections;
 }
 
-export function releaseNotes(zh, en, version, branch) {
+export function releaseNotes(zh, en) {
   const chinese = parseChangelog(zh, 'zh'), english = parseChangelog(en, 'en');
   const structure = sections => sections.map(({ body, ...section }) => section);
   assert.deepEqual(structure(chinese), structure(english), '中英文更新日志版本、日期、分类或条目数量不一致');
-  // main 无对应版本章节时回退采用未发布章节，dev 直接合并即可发布；已撤回的版本章节不回退。
-  const wanted = branch === 'dev' || !chinese.some(section => section.version === version)
-    ? 'Unreleased' : version;
-  const selected = chinese.find(section => section.version === wanted);
-  assert.ok(selected && !selected.yanked && selected.groups.some(group => group.entries), '缺少本次变更说明或版本已撤回');
+  // 按日志顺序读取最新的非空章节，不依赖分支或包版本；已撤回版本不回退。
+  const selected = chinese.find(section => section.groups.some(group => group.entries));
+  assert.ok(selected && !selected.yanked, '缺少本次变更说明或版本已撤回');
   return selected.body;
 }
 
