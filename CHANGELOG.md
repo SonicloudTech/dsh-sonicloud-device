@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Extend npm publication verification, reconcile the original package after upload timeouts or connection failures, and retry temporary registry and download errors to avoid false failures after publication; integrity mismatches still fail.
 - Read CI release notes from the latest non-empty changelog section on every branch, whether Unreleased or a numbered version, independently of the branch or package version.
 
 ## 0.1.3 - 2026-11-20
