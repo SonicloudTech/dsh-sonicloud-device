@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- Update the CI package allowlist to accept and require all eight language metadata files and dictionaries, fixing packaging failures caused by treating locale resources as non-release files.
+- Prevent credential scanning from mistaking translation keys such as `panel.password` for password settings while retaining checks for actual credentials.
 - Restore horizontal labels and controls at normal settings-dialog widths by removing premature stacked layout rules, while preserving long-text wrapping.
 - Extend npm publication verification, reconcile the original package after upload timeouts or connection failures, and retry temporary registry and download errors to avoid false failures after publication; integrity mismatches still fail.
 - Read CI release notes from the latest non-empty changelog section on every branch, whether Unreleased or a numbered version, independently of the branch or package version.

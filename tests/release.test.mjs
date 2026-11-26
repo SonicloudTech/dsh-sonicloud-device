@@ -101,9 +101,31 @@ test('安装包缺失原生库、混入开发文件或凭据时失败', () => {
     [...requiredFiles, 'src/.env'], [...requiredFiles, 'src/host/../../secret'],
     [...requiredFiles, 'native/secret.key'], [...requiredFiles, requiredFiles[0]]]) assert.throws(() => validateFileList(files));
   validateText('src/asr/config.mjs', "tokenUrl: 'https://service.example/token'");
+  validateText('locale/en.json', JSON.stringify({ 'panel.password': 'The target is a password field' }));
+  validateText('dist/client.js', 'var en = { "panel.password": "The target is a password field" };');
   assert.throws(() => validateText('src/asr/config.mjs', "token: 'fixture-secret-123'"));
+  for (const key of ['accessToken', 'apiKey', 'appSecret', 'clientSecret', 'password', 'token']) {
+    for (const text of [JSON.stringify({ [key]: 'fixture-secret-123' }), `{'${key}': 'fixture-secret-123'}`,
+      `${key} = 'fixture-secret-123'`, `config.${key} = 'fixture-secret-123'`]) {
+      assert.throws(() => validateText('src/asr/config.mjs', text), /可能包含凭据/);
+    }
+  }
   assert.throws(() => validateText('src/a.mjs', `const value = 'npm_${'a'.repeat(36)}'`));
   assert.equal(escapeHtml('<script>&</script>'), '&lt;script&gt;&amp;&lt;/script&gt;');
+});
+
+test('发布包包含八语种元数据和字典，缺失资源或额外 locale 文件会被拒绝', () => {
+  const files = [...requiredFiles];
+  for (const language of ['zh', 'en', 'ja', 'es', 'fr', 'de', 'ru', 'pt']) {
+    for (const path of [`locale/${language}.json`, `src/shared/locales/${language}.json`]) {
+      assert.ok(files.includes(path), `${path} 必须随包发布`);
+      assert.throws(() => validateFileList(files.filter(file => file !== path)), /安装包缺少/);
+    }
+  }
+  validateFileList(files);
+  for (const path of ['locale/debug.json', 'locale/de.json.bak', 'locale/de.json/extra', 'locale/nested/de.json']) {
+    assert.throws(() => validateFileList([...files, path]), /非发布文件/);
+  }
 });
 
 test('项目元数据、锁文件与插件实例 ID 在迁移后保持一致', async () => {

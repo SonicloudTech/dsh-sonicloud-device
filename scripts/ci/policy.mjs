@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { LOCALES } from '../../src/shared/i18n.mjs';
 
 export const PACKAGE = '@sonicloud/dsh-sonicloud-device';
 export const REPOSITORY = 'SonicloudTech/dsh-sonicloud-device';
@@ -111,8 +112,11 @@ export function publicationDecision(metadata, version, record, context) {
   return 'verify';
 }
 
+const localeFiles = LOCALES.map(language => `locale/${language}.json`);
+
 export const requiredFiles = [
   'package.json', 'LICENSE', 'README.md', 'README.zh.md', 'CHANGELOG.md', 'CHANGELOG.zh.md', 'cordis.patch.yml',
+  ...localeFiles, ...LOCALES.map(language => `src/shared/locales/${language}.json`),
   'dist/client.js', 'dist/build.json', 'src/host/index.mjs', 'src/devices/native.mjs',
   'src/devices/native-worker.mjs', 'src/asr/config.mjs', 'src/desktop/presentation.mjs',
   'native/THIRD_PARTY_LICENSES.txt', 'native/COPYING.LGPLv2.1', 'native/LICENSE.hidapi-bsd',
@@ -147,13 +151,13 @@ export function validateFileList(files) {
   for (const path of paths) {
     assert.ok(!path.split('/').some(part => part.startsWith('.') || ['node_modules', 'work', 'tests', 'scripts', 'generations'].includes(part)), `安装包含不允许的路径：${path}`);
     assert.ok(!/[\\\r\n]/.test(path) && !path.startsWith('/'), '安装包路径无效');
-    assert.ok(/^(?:src\/(?:asr|host|shared|devices|desktop|client\/assets)\/|native\/|docs\/|dist\/(?:client\.js|build\.json)$|(?:package\.json|cordis\.patch\.yml|README(?:\.zh)?\.md|CHANGELOG(?:\.zh)?\.md|LICENSE)$)/.test(path), `安装包含非发布文件：${path}`);
+    assert.ok(localeFiles.includes(path) || /^(?:src\/(?:asr|host|shared|devices|desktop|client\/assets)\/|native\/|docs\/|dist\/(?:client\.js|build\.json)$|(?:package\.json|cordis\.patch\.yml|README(?:\.zh)?\.md|CHANGELOG(?:\.zh)?\.md|LICENSE)$)/.test(path), `安装包含非发布文件：${path}`);
     assert.ok(!/\.(?:pem|key|p12|pfx|tgz|log|map)$/i.test(path), `安装包含敏感或临时文件：${path}`);
   }
 }
 
 export function validateText(path, contents) {
-  const secret = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bnpm_[A-Za-z0-9]{30,}\b|\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{30,}\b|\bAKIA[A-Z0-9]{16}\b|["']?(?:accessToken|apiKey|appSecret|clientSecret|password|token)["']?\s*[:=]\s*["'][^"'\r\n]{8,}["']/i;
+  const secret = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bnpm_[A-Za-z0-9]{30,}\b|\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{30,}\b|\bAKIA[A-Z0-9]{16}\b|(?:(["'])(?:accessToken|apiKey|appSecret|clientSecret|password|token)\1|\b(?:accessToken|apiKey|appSecret|clientSecret|password|token))\s*[:=]\s*["'][^"'\r\n]{8,}["']/i;
   assert.ok(!secret.test(contents), `安装包可能包含凭据：${path}（不输出匹配内容）`);
   assert.ok(!/work\/dev-plugin|watch\.lock|client\.next\.js/.test(path === 'dist/client.js' ? contents : ''), '客户端包含开发产物');
 }
