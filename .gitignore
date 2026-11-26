@@ -5,6 +5,7 @@ node_modules/
 
 # 构建、开发运行目录与安装包
 /dist/
+/locale/
 /work/
 /artifacts/
 *.tgz

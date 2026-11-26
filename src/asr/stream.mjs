@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import WebSocket from 'ws';
 
 class Queue {
@@ -5,7 +6,7 @@ class Queue {
   ended = false;
   push(item) {
     if (this.ended) return;
-    if (this.items.length >= 256) { this.items = [{ type: 'error', message: '识别结果接收过慢，请重新录音' }]; this.end(); return; }
+    if (this.items.length >= 256) { this.items = [{ type: 'error', message: msg('error.audio') }]; this.end(); return; }
     this.items.push(item); this.wake?.();
   }
   end() { this.ended = true; this.wake?.(); }
@@ -19,12 +20,12 @@ class Queue {
 }
 
 const errors = {
-  '4010': 'Token 认证失败，请稍后重试',
-  '4011': 'ASR 额度不足，请充值后重试',
-  '4012': 'ASR 应用不存在、未认证或已下线',
-  '4013': 'ASR 并发连接已达上限，请稍后重试',
-  '4014': 'License 设备未注册', '4015': 'License 设备已被其他会话占用',
-  '-1': '语音太短，请重新录音', '16': '未识别到语音',
+  '4010': msg('error.auth'),
+  '4011': msg('error.quota'),
+  '4012': msg('error.auth'),
+  '4013': msg('error.busy'),
+  '4014': msg('error.auth'), '4015': msg('error.busy'),
+  '-1': msg('error.noSpeech'), '16': msg('error.noSpeech'),
 };
 
 // The live service also uses numeric strings and code 3 interim / code 10 final frames.
@@ -56,16 +57,16 @@ export async function* streamRecognition({ service, token, uplink, signal, onAut
     socket.terminate();
   };
   const arm = (delay, message) => { clearTimeout(timer); timer = setTimeout(() => fail(message), delay); };
-  connectTimer = setTimeout(() => fail('ASR 连接超时，请检查网络后重试'), connectTimeout);
+  connectTimer = setTimeout(() => fail(msg('error.timeout')), connectTimeout);
   const abort = () => { queue.end(); settleReady(false); socket.terminate(); };
   signal.addEventListener('abort', abort, { once: true });
   if (signal.aborted) abort();
-  socket.on('error', () => fail('ASR 连接失败，请检查服务地址与网络'));
+  socket.on('error', () => fail(msg('error.connection')));
   const transcript = (message, forcedFinal) => {
     const begin = timestamp(message.Begin), end = timestamp(message.End);
     if (!ready || complete || typeof message.result !== 'string' || message.result.length > 4096 ||
         begin === undefined || end === undefined || (end > 0 && end < begin)) {
-      fail('ASR 返回了无效识别结果'); return false;
+      fail(msg('error.connection')); return false;
     }
     queue.push({ type: 'transcript', text: message.result, begin, end, final: forcedFinal ?? end > 0 });
     return true;
@@ -73,20 +74,20 @@ export async function* streamRecognition({ service, token, uplink, signal, onAut
   socket.on('message', data => {
     if (queue.ended) return;
     let message;
-    try { message = JSON.parse(data.toString()); } catch { fail('ASR 返回了无效数据'); return; }
+    try { message = JSON.parse(data.toString()); } catch { fail(msg('error.connection')); return; }
     const code = String(message?.errCode);
     if (code === '1000') {
       if (ready) return;
       ready = true; clearTimeout(connectTimer);
-      arm(idleTimeout, '录音数据中断，请重新录音'); queue.push({ type: 'ready' });
+      arm(idleTimeout, msg('error.audio')); queue.push({ type: 'ready' });
       settleReady(true);
-    } else if (code === '1001') queue.push({ type: 'warning', message: 'ASR 余额较低，请及时充值' });
+    } else if (code === '1001') queue.push({ type: 'warning', message: msg('warning.lowBalance') });
     else if (code === '0') transcript(message);
     else if (code === '3') {
       // End can be nonzero on live rolling results; code 3 is never a final sentence.
       if (Object.hasOwn(message, 'Begin') || Object.hasOwn(message, 'End')) transcript(message, false);
     } else if (code === '10') {
-      if (!ended) { fail('ASR 服务提前结束了录音'); return; }
+      if (!ended) { fail(msg('error.connection')); return; }
       // Older responses send the final sentence separately with code 0. Newer ones
       // include it in code 10. Do not treat an untimed status message as transcript.
       if ((Object.hasOwn(message, 'Begin') || Object.hasOwn(message, 'End')) && !transcript(message, true)) return;
@@ -96,12 +97,12 @@ export async function* streamRecognition({ service, token, uplink, signal, onAut
     }
     else {
       if (code === '4010') onAuthFailure();
-      fail(errors[code] ?? (code.startsWith('400') ? 'ASR 连接参数无效，请检查配置' : 'ASR 识别失败，请稍后重试'), code);
+      fail(errors[code] ?? msg('error.connection'), code);
     }
   });
   socket.on('close', () => {
     if (queue.ended) return;
-    fail('ASR 连接中断，识别结果未完成');
+    fail(msg('error.connection'));
   });
   const input = uplink[Symbol.asyncIterator]();
   const upload = async () => {
@@ -114,21 +115,21 @@ export async function* streamRecognition({ service, token, uplink, signal, onAut
         if (queue.ended || signal.aborted) return;
         if (done) {
           ended = true;
-          arm(finalTimeout, '最终识别结果超时，可复制已有预览后重试');
+          arm(finalTimeout, msg('error.timeout'));
           queue.push({ type: 'finishing' });
           socket.send('end'); return;
         }
-        if (typeof value !== 'string' || value.length > 4400) throw new Error('音频包无效');
+        if (typeof value !== 'string' || value.length > 4400) throw new Error(msg('error.audio'));
         const bytes = Buffer.from(value, 'base64');
-        if (bytes.toString('base64') !== value || bytes.length <= 80 || bytes.length > 3200 || bytes.length % 2) throw new Error('音频包无效');
+        if (bytes.toString('base64') !== value || bytes.length <= 80 || bytes.length > 3200 || bytes.length % 2) throw new Error(msg('error.audio'));
         totalBytes += bytes.length;
-        if (totalBytes > 16_000 * 2 * 600) throw new Error('单次录音最长 10 分钟');
-        if (socket.bufferedAmount > 320_000) throw new Error('网络发送过慢，请重新录音');
-        socket.send(bytes); arm(idleTimeout, '录音数据中断，请重新录音');
+        if (totalBytes > 16_000 * 2 * 600) throw new Error(msg('error.duration'));
+        if (socket.bufferedAmount > 320_000) throw new Error(msg('error.generic'));
+        socket.send(bytes); arm(idleTimeout, msg('error.audio'));
       }
     } catch (error) {
-      if (!signal.aborted) fail(error.message === '音频包无效' || error.message === '单次录音最长 10 分钟' || error.message === '网络发送过慢，请重新录音'
-        ? error.message : '音频上传中断，请重新录音');
+      if (!signal.aborted) fail(error.message === msg('error.audio') || error.message === msg('error.duration') || error.message === msg('error.generic')
+        ? error.message : msg('error.audio'));
     }
   };
   void upload();

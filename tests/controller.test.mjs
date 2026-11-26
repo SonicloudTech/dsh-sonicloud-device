@@ -85,7 +85,7 @@ test('首次权限检查不阻塞设备流，缺权限只提醒一次且不会�
   finish({ ok: true, value: permissionState() });
   await tick();
   assert.equal(c.state.screenshotPermissions.screenRecording, false);
-  assert.match(c.state.toast.message, /macOS 首次使用.*声云设备.*授权/);
+  assert.match(c.state.toast.message, /"key":"permission\.firstUse"/);
   const firstToast = c.state.toast;
   const recheck = c.refreshScreenshotPermissions('check', { automatic: true });
   await tick(); finish({ ok: true, value: permissionState() }); await recheck;
@@ -103,7 +103,7 @@ test('授权请求成功保持未授权状态，辅助功能缺失不阻止普�
   assert.equal(await c.captureScreenshot(), false); assert.equal(captures, 0);
   await c.refreshScreenshotPermissions('screen');
   assert.equal(c.state.screenshotPermissions.screenRecording, false);
-  assert.match(c.state.screenshotPermissionMessage, /完成授权.*重新检查/);
+  assert.match(c.state.screenshotPermissionMessage, /"key":"permission\.requested"/);
   current = permissionState({ screenRecording: true });
   await c.refreshScreenshotPermissions('refresh');
   assert.equal(await c.captureScreenshot(), true); assert.equal(captures, 1);
@@ -165,7 +165,7 @@ test('两类权限并行检查每连接只提示一次，打字缺权限不阻�
   await c.refreshTypingPermissions('accessibility');
   assert.deepEqual(typingCalls, ['check', 'accessibility']);
   assert.equal(c.state.typingPermissions.accessibility, false);
-  assert.match(c.state.typingPermissionMessage, /Sonicloud Voice.*完成授权/);
+  assert.match(c.state.typingPermissionMessage, /"key":"permission\.requested"/);
   assert.equal(await c.captureScreenshot(), true); assert.equal(captures, 1);
   streams[0].end();
   for (let i = 0; i < 20 && typingCalls.filter(action => action === 'check').length < 2; i++) await tick();

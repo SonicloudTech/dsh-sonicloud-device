@@ -1,3 +1,5 @@
+import { dictionaries, translate, message as msg } from '../src/shared/i18n.mjs';
+import { hostLocale } from './locale-helper.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -31,6 +33,7 @@ test('built client hides shared services, edits per-device preferences, and disp
     events.push(devicesEvent());
   };
   const api = {
+    syncLocale: async () => true,
     watch: () => events,
     captureScreenshot: () => { screenshotCalls++; return new Promise(resolve => { finishScreenshot = resolve; }); },
     screenshotPermissions: async action => { permissionCalls.push(action); return { ok: true, value: { ...screenshotPermissions } }; },
@@ -89,8 +92,11 @@ test('built client hides shared services, edits per-device preferences, and disp
     return scope;
   };
   const scope = makeScope();
+  const { host: locale, form } = hostLocale();
   const ctx = {
-    remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 11); return () => { remoteDisposed = true; }; } },
+    locale, configForms: { get: () => form },
+    effect: factory => { cleanups.push(factory()); },
+    remote: { $mount: async remote => { assert.equal(remote.descriptors.length, 12); return () => { remoteDisposed = true; }; } },
     inject: (services, callback) => { callback(scope); return { dispose: async () => { for (const cleanup of cleanups) await cleanup(); } }; },
   };
   const dispose = await plugin.apply(ctx);
@@ -225,7 +231,7 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.equal(dom.window.document.querySelector('[data-test-toast]'), null);
     const confirmLink = () => [...dom.window.document.querySelectorAll('.dsh-mouse-link-controls button')].find(button => button.textContent === '确认').click();
     await act(async () => confirmLink());
-    assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /设置未生效/);
+    assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /未保存.*HTTP/);
     assert.equal(dom.window.document.querySelector('.dsh-mouse-form [role="alert"]'), null);
     assert.equal((await deviceStore.get('0001')).preferences.mAction, 'enter');
     await act(async () => dom.window.document.querySelector('[data-test-toast] button').click());
@@ -236,6 +242,27 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.equal(dom.window.document.querySelector('[aria-label="DPI"]').textContent, '2400');
     assert.equal(dom.window.document.querySelector('[aria-label="一键链接 URL"]').value, 'www.google.com');
     assert.equal((await deviceStore.get('0001')).preferences.linkUrl, '');
+    const draftInput = dom.window.document.querySelector('input[type=url]');
+    draftInput.attachEvent = () => {}; draftInput.detachEvent = () => {};
+    draftInput.focus();
+    const beforeSwitch = await deviceStore.get('0001');
+    const registrationCount = registrations.size;
+    for (const language of Object.keys(dictionaries)) {
+      await act(async () => {
+        form.update({ revision: form.getSnapshot().revision + 1, value: { preference: language } });
+        locale.update({ active: language });
+      });
+      assert.equal(dom.window.document.querySelector('input[type=url]'), draftInput, '切换不重新挂载输入框');
+      assert.equal(dom.window.document.activeElement, draftInput);
+      assert.equal(draftInput.value, 'www.google.com');
+      assert.equal(draftInput.getAttribute('aria-label'), translate(language, 'keys.linkUrl'));
+      assert.equal(dom.window.document.querySelector('h2').textContent, translate(language, 'app.title'));
+      assert.equal(settings.options.label(), translate(language, 'app.title'));
+      assert.equal(panelRow.options.label(), translate(language, 'app.title'));
+      assert.equal(registrations.size, registrationCount);
+      assert.deepEqual(await deviceStore.get('0001'), beforeSwitch, '语言变化不保存设备配置');
+    }
+    await act(async () => { form.update({ revision: 20, value: { preference: 'zh' } }); locale.update({ active: 'zh' }); });
     await act(async () => blurLink());
     assert.equal((await deviceStore.get('0001')).preferences.linkUrl, '');
     assert.equal(dom.window.document.querySelector('[data-test-toast]'), null);
@@ -279,9 +306,12 @@ test('built client hides shared services, edits per-device preferences, and disp
     assert.doesNotMatch(dom.window.document.body.textContent, /原语言选项已不再支持/);
     assert.deepEqual((await deviceStore.get('0003')).preferences, { ...defaultPreferences(), punctuation: false });
     const controller = settings.options.inject().controller;
-    await act(async () => controller.event({ type: 'notice', message: '认证失败，请稍后重试' }));
+    await act(async () => controller.event({ type: 'notice', message: msg('error.auth') }));
     assert.equal(dom.window.document.querySelectorAll('[data-test-toast]').length, 1);
-    assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /认证失败/);
+    assert.match(dom.window.document.querySelector('[data-test-toast]').textContent, /鉴权失败/);
+    await act(async () => locale.update({ active: 'de' }));
+    assert.ok(dom.window.document.querySelector('[data-test-toast]').textContent.includes(translate('de', 'error.auth')));
+    await act(async () => locale.update({ active: 'zh' }));
     await act(async () => dom.window.document.querySelector('[data-test-toast] button').click());
     assert.equal(dom.window.document.querySelector('[data-test-toast]'), null);
 

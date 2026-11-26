@@ -8,7 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { PACKAGE, REPOSITORY, compareVersions, developmentVersion, escapeHtml, publicationDecision,
   releaseNotes, requiredFiles, validateFileList, validateManifest, validateText } from '../scripts/ci/policy.mjs';
-import { awaitPublication, context, inspectTarball, registryMetadata, verifyBundle, verifyRegistry } from '../scripts/ci/release.mjs';
+import { awaitPublication, context, inspectTarball, publishAndVerify, registryMetadata, verifyBundle, verifyRegistry } from '../scripts/ci/release.mjs';
 
 const run = promisify(execFile);
 const ctx = { repository: REPOSITORY, sha: 'a'.repeat(40), runId: '123', attempt: '2' };
@@ -17,6 +17,10 @@ const env = { GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: REPOSITORY, GITHUB_S
   GITHUB_REF: 'refs/heads/main', GITHUB_RUN_ID: '123', GITHUB_RUN_NUMBER: '4', GITHUB_RUN_ATTEMPT: '2' };
 const metadata = (version = '0.1.0', integrity = record.integrity) => ({ name: PACKAGE,
   versions: { [version]: { name: PACKAGE, version, dist: { integrity } } }, 'dist-tags': { latest: version } });
+function publicationClock(timeoutMs = 10000) {
+  let time = 0;
+  return { timeoutMs, now: () => time, pause: async ms => { time += ms; }, log: () => {} };
+}
 const logs = (zhBody = '- 中文变更', enBody = '- English change') => [
   `# 更新日志\n\n## 未发布\n\n### 新增\n${zhBody}\n\n## 0.1.0 - 2026-11-09\n\n### 修复\n- 中文修复\n`,
   `# Changelog\n\n## Unreleased\n\n### Added\n${enBody}\n\n## 0.1.0 - 2026-11-09\n\n### Fixed\n- English fix\n`,
@@ -33,28 +37,42 @@ test('发布版本、测试版本及触发上下文有严格边界', () => {
 
 test('双语日志核对全部章节、日期、分类与条目数量并选择本次说明', () => {
   const [zh, en] = logs();
-  assert.match(releaseNotes(zh, en, '0.1.0', 'dev'), /中文变更/);
-  assert.match(releaseNotes(zh, en, '0.1.0', 'main'), /中文修复/);
+  assert.equal(releaseNotes(zh, en), '### 新增\n- 中文变更');
   for (const changed of [en.replace('2026-11-09', '2026-11-08'), en.replace('### Fixed', '### Added'),
     en.replace('- English fix', '- First\n- Second'), en.replace('## Unreleased', '## Pending'),
-    en.replace('2026-11-09', '2026-02-30')]) assert.throws(() => releaseNotes(zh, changed, '0.1.0', 'main'));
-  assert.throws(() => releaseNotes(...logs('', ''), '0.1.0', 'dev'));
-  assert.match(releaseNotes(zh, en, '0.2.0', 'main'), /中文变更/);
-  assert.throws(() => releaseNotes(...logs('', ''), '0.2.0', 'main'));
-  assert.throws(() => releaseNotes(zh.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [已撤回]'),
-    en.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [YANKED]'), '0.1.0', 'main'));
+    en.replace('2026-11-09', '2026-02-30')]) assert.throws(() => releaseNotes(zh, changed));
+  assert.throws(() => releaseNotes(...logs('', '')), /省略没有条目/);
+  assert.throws(() => releaseNotes('# 更新日志\n\n## 未发布\n', '# Changelog\n\n## Unreleased\n'), /缺少本次变更说明/);
 });
 
-test('完全折叠的更新日志在 main 采用版本章节，dev 仍要求未发布章节', () => {
+test('读取顶部最新非空章节，兼容空未发布章节和仅版本章节', () => {
   const [zh, en] = logs();
   const foldedZh = zh.replace('## 未发布\n\n### 新增\n- 中文变更\n\n', '');
   const foldedEn = en.replace('## Unreleased\n\n### Added\n- English change\n\n', '');
-  assert.match(releaseNotes(foldedZh, foldedEn, '0.1.0', 'main'), /中文修复/);
-  assert.throws(() => releaseNotes(foldedZh, foldedEn, '0.1.0', 'dev'), /缺少本次变更说明/);
-  assert.throws(() => releaseNotes(foldedZh, foldedEn, '0.2.0', 'main'), /缺少本次变更说明/);
+  const emptyZh = zh.replace('### 新增\n- 中文变更\n\n', '');
+  const emptyEn = en.replace('### Added\n- English change\n\n', '');
+  for (const [chinese, english] of [[foldedZh, foldedEn], [emptyZh, emptyEn]]) {
+    assert.equal(releaseNotes(chinese, english), '### 修复\n- 中文修复');
+    assert.throws(() => releaseNotes(
+      chinese.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [已撤回]'),
+      english.replace('0.1.0 - 2026-11-09', '0.1.0 - 2026-11-09 [YANKED]')), /版本已撤回/);
+    assert.equal(releaseNotes(
+      chinese.replace('## 0.1.0', '## 0.2.0 - 2026-11-25\n\n## 0.1.0'),
+      english.replace('## 0.1.0', '## 0.2.0 - 2026-11-25\n\n## 0.1.0')), '### 修复\n- 中文修复');
+  }
+  for (const prefix of ['', '## 未发布\n\n']) {
+    const versionedZh = zh.replace('## 未发布', `${prefix}## 0.2.0 - 2026-11-25`);
+    const versionedEn = en.replace('## Unreleased', `${prefix.replace('未发布', 'Unreleased')}## 0.2.0 - 2026-11-25`);
+    assert.equal(releaseNotes(versionedZh, versionedEn), '### 新增\n- 中文变更');
+    assert.throws(() => releaseNotes(
+      versionedZh.replace('0.2.0 - 2026-11-25', '0.2.0 - 2026-11-25 [已撤回]'),
+      versionedEn.replace('0.2.0 - 2026-11-25', '0.2.0 - 2026-11-25 [YANKED]')), /版本已撤回/);
+    assert.throws(() => releaseNotes(
+      versionedZh.replace('0.2.0', '0.0.9'), versionedEn.replace('0.2.0', '0.0.9')), /倒序排列/);
+  }
   const swappedZh = zh.replace('## 未发布\n\n### 新增\n- 中文变更\n\n## 0.1.0 - 2026-11-09',
     '## 0.1.0 - 2026-11-09\n\n### 修复\n- 临时条目\n\n## 未发布\n\n### 新增\n- 中文变更\n\n## 0.0.9 - 2026-11-08');
-  assert.throws(() => releaseNotes(swappedZh, en, '0.1.0', 'main'), /未发布章节必须置顶/);
+  assert.throws(() => releaseNotes(swappedZh, en), /未发布章节必须置顶/);
 });
 
 test('新版本可发布，重复版本只能使用同次运行且完整性一致的恢复记录', () => {
@@ -83,9 +101,31 @@ test('安装包缺失原生库、混入开发文件或凭据时失败', () => {
     [...requiredFiles, 'src/.env'], [...requiredFiles, 'src/host/../../secret'],
     [...requiredFiles, 'native/secret.key'], [...requiredFiles, requiredFiles[0]]]) assert.throws(() => validateFileList(files));
   validateText('src/asr/config.mjs', "tokenUrl: 'https://service.example/token'");
+  validateText('locale/en.json', JSON.stringify({ 'panel.password': 'The target is a password field' }));
+  validateText('dist/client.js', 'var en = { "panel.password": "The target is a password field" };');
   assert.throws(() => validateText('src/asr/config.mjs', "token: 'fixture-secret-123'"));
+  for (const key of ['accessToken', 'apiKey', 'appSecret', 'clientSecret', 'password', 'token']) {
+    for (const text of [JSON.stringify({ [key]: 'fixture-secret-123' }), `{'${key}': 'fixture-secret-123'}`,
+      `${key} = 'fixture-secret-123'`, `config.${key} = 'fixture-secret-123'`]) {
+      assert.throws(() => validateText('src/asr/config.mjs', text), /可能包含凭据/);
+    }
+  }
   assert.throws(() => validateText('src/a.mjs', `const value = 'npm_${'a'.repeat(36)}'`));
   assert.equal(escapeHtml('<script>&</script>'), '&lt;script&gt;&amp;&lt;/script&gt;');
+});
+
+test('发布包包含八语种元数据和字典，缺失资源或额外 locale 文件会被拒绝', () => {
+  const files = [...requiredFiles];
+  for (const language of ['zh', 'en', 'ja', 'es', 'fr', 'de', 'ru', 'pt']) {
+    for (const path of [`locale/${language}.json`, `src/shared/locales/${language}.json`]) {
+      assert.ok(files.includes(path), `${path} 必须随包发布`);
+      assert.throws(() => validateFileList(files.filter(file => file !== path)), /安装包缺少/);
+    }
+  }
+  validateFileList(files);
+  for (const path of ['locale/debug.json', 'locale/de.json.bak', 'locale/de.json/extra', 'locale/nested/de.json']) {
+    assert.throws(() => validateFileList([...files, path]), /非发布文件/);
+  }
 });
 
 test('项目元数据、锁文件与插件实例 ID 在迁移后保持一致', async () => {
@@ -143,19 +183,155 @@ test('发布后同时核对 latest、SRI 和下载内容，不能只相信 regis
 
 test('等待 npm 异步处理，但完整性错误立即失败且不会重复发布', async () => {
   const reads = [null, { ...metadata(), 'dist-tags': { latest: '0.0.9' } }, metadata()];
-  let pauses = 0, verifications = 0;
+  let verifications = 0;
+  const clock = publicationClock(15000);
   assert.equal(await awaitPublication(record, {
-    readMetadata: async () => reads.shift(), pause: async () => { pauses++; },
-    verify: async () => { verifications++; return 'verified'; }, attempts: 3,
+    ...clock, readMetadata: async () => reads.shift(),
+    verify: async () => { verifications++; return 'verified'; },
   }), 'verified');
-  assert.equal(pauses, 2); assert.equal(verifications, 1);
+  assert.equal(clock.now(), 10000); assert.equal(verifications, 1);
   await assert.rejects(awaitPublication(record, {
-    readMetadata: async () => null, pause: async () => {}, attempts: 2,
+    ...publicationClock(), readMetadata: async () => null,
   }), /未确认版本/);
   await assert.rejects(awaitPublication(record, {
+    ...publicationClock(),
     readMetadata: async () => metadata(), verify: async () => { throw new Error('integrity mismatch'); },
     pause: async () => assert.fail('完整性错误不应等待重试'),
   }), /integrity mismatch/);
+});
+
+test('发布超过十分钟才可见仍能确认，查询耗时计入截止时间', async () => {
+  const clock = publicationClock();
+  delete clock.timeoutMs; // 使用实际默认窗口，避免退回 3 分钟后测试仍通过。
+  assert.equal(await awaitPublication(record, {
+    ...clock, readMetadata: async () => clock.now() < 10.5 * 60000 ? null : metadata(),
+    verify: async () => 'verified',
+  }), 'verified');
+  assert.equal(clock.now(), 10.5 * 60000);
+  const slow = publicationClock();
+  let reads = 0;
+  await assert.rejects(awaitPublication(record, {
+    ...slow, readMetadata: async signal => {
+      assert.ok(signal instanceof AbortSignal);
+      reads++; await slow.pause(10000); return null;
+    },
+    pause: async () => assert.fail('查询已耗尽预算，不再等待'),
+  }), /发布结果未确认/);
+  assert.equal(reads, 1);
+});
+
+test('确认阶段重试查询、下载和响应体的临时故障，最终仍核对真实包', async () => {
+  const buffer = Buffer.from('fixture tarball');
+  const saved = { ...record, sha256: createHash('sha256').update(buffer).digest('hex') };
+  const data = metadata();
+  data.versions[record.version].dist.tarball = 'https://registry.npmjs.org/package/-/fixture.tgz';
+  let reads = 0, downloads = 0;
+  const networkError = new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
+  const result = await awaitPublication(saved, {
+    ...publicationClock(60000),
+    readMetadata: signal => registryMetadata(async () => {
+      reads++;
+      if (reads === 1) throw new DOMException('timed out', 'TimeoutError');
+      if (reads === 2) return { ok: false, status: 503 };
+      if (reads === 3) return { ok: false, status: 429 };
+      return { ok: true, json: async () => data };
+    }, signal),
+    verify: (value, meta, signal) => verifyRegistry(value, meta, async () => {
+      downloads++;
+      if (downloads === 1) return { ok: false, status: 404 };
+      if (downloads === 2) return { ok: false, status: 502 };
+      return { ok: true, arrayBuffer: async () => {
+        if (downloads === 3) throw networkError;
+        if (downloads === 4) throw new DOMException('body timed out', 'AbortError');
+        return buffer;
+      } };
+    }, signal),
+  });
+  assert.equal(result, data.versions[record.version].dist.tarball);
+  assert.equal(reads, 8); assert.equal(downloads, 5);
+});
+
+test('鉴权、无效元数据、错误 SRI 或 SHA-256 不会被重试掩盖', async () => {
+  const noRetry = { ...publicationClock(), pause: async () => assert.fail('永久错误不得重试') };
+  for (const status of [400, 401, 403]) {
+    await assert.rejects(awaitPublication(record, {
+      ...noRetry, readMetadata: () => registryMetadata(async () => ({ ok: false, status })),
+    }), new RegExp(`HTTP ${status}`));
+  }
+  await assert.rejects(awaitPublication(record, {
+    ...noRetry, readMetadata: () => registryMetadata(async () => ({ ok: true, json: async () => ({ name: 'wrong' }) })),
+  }), /不同的包/);
+  await assert.rejects(awaitPublication(record, {
+    ...noRetry, readMetadata: async () => ({ ...metadata(record.version, 'wrong'), 'dist-tags': {} }),
+  }), /完整性/);
+  const data = metadata(); data.versions[record.version].dist.tarball = 'https://registry.npmjs.org/fixture.tgz';
+  await assert.rejects(awaitPublication({ ...record, sha256: 'wrong' }, {
+    ...noRetry, readMetadata: async () => data,
+    verify: (value, meta) => verifyRegistry(value, meta, async () => ({ ok: true, arrayBuffer: async () => Buffer.from('wrong') })),
+  }), /SHA-256/);
+});
+
+test('上传成功、超时或断线均核对原包且只上传一次；永久失败立即退出', async () => {
+  for (const error of [null, Object.assign(new Error('command timed out'), { killed: true, signal: 'SIGTERM' }),
+    Object.assign(new Error('network failure'), { stderr: 'npm error code ETIMEDOUT' })]) {
+    let uploads = 0, verifications = 0;
+    const result = await publishAndVerify({ ...record, filename: 'fixture.tgz' }, {
+      execute: async (command, args) => {
+        uploads++; assert.equal(command, 'npm'); assert.equal(args[0], 'publish');
+        assert.ok(args.includes('--ignore-scripts'));
+        if (error) throw error;
+        return { stdout: 'published', stderr: '' };
+      },
+      waitForPublication: async saved => {
+        verifications++; assert.equal(saved.integrity, record.integrity); return 'verified';
+      }, log: () => {}, warn: () => {},
+    });
+    assert.equal(result, 'verified'); assert.equal(uploads, 1); assert.equal(verifications, 1);
+  }
+  const denied = Object.assign(new Error('publish denied'), { stderr: 'npm error code E403' });
+  await assert.rejects(publishAndVerify({ ...record, filename: 'fixture.tgz' }, {
+    execute: async () => { throw denied; }, waitForPublication: async () => assert.fail('鉴权失败不等待'), log: () => {},
+  }), error => error === denied);
+  let uploads = 0;
+  await assert.rejects(publishAndVerify({ ...record, filename: 'fixture.tgz' }, {
+    execute: async () => { uploads++; throw Object.assign(new Error('timeout'), { killed: true }); },
+    waitForPublication: saved => awaitPublication(saved, { ...publicationClock(), readMetadata: async () => null }),
+    log: () => {}, warn: () => {},
+  }), /发布结果未确认/);
+  assert.equal(uploads, 1);
+});
+
+test('dev 和 main 初始化均读取最新变更，不依赖包版本或未发布标题', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'sonicloud-latest-notes-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+  const lock = JSON.parse(await readFile('package-lock.json', 'utf8'));
+  const [zh, en] = logs();
+  const cases = [
+    [zh, en],
+    [zh.replace('## 未发布', '## 未发布\n\n## 0.2.0 - 2026-11-25'),
+      en.replace('## Unreleased', '## Unreleased\n\n## 0.2.0 - 2026-11-25')],
+    [zh.replace('## 未发布', '## 0.2.0 - 2026-11-25'),
+      en.replace('## Unreleased', '## 0.2.0 - 2026-11-25')],
+  ];
+  for (const branch of ['dev', 'main']) {
+    // 覆盖包版本指向旧章节和日志中没有对应包版本章节的情况。
+    for (const version of ['0.1.0', '0.3.0']) {
+      for (const [chinese, english] of cases) {
+        pkg.version = lock.version = lock.packages[''].version = version;
+        await writeFile(join(directory, 'package.json'), JSON.stringify(pkg));
+        await writeFile(join(directory, 'package-lock.json'), JSON.stringify(lock));
+        await writeFile(join(directory, 'CHANGELOG.zh.md'), chinese);
+        await writeFile(join(directory, 'CHANGELOG.md'), english);
+        await run(process.execPath, [resolve('scripts/ci/release.mjs'), 'init'], {
+          cwd: directory, env: { ...process.env, ...env, GITHUB_REF: `refs/heads/${branch}`, GITHUB_OUTPUT: join(directory, 'outputs') },
+        });
+        const state = JSON.parse(await readFile(join(directory, 'work/release-state.json'), 'utf8'));
+        assert.equal(state.notes, '### 新增\n- 中文变更');
+        assert.equal(state.version, branch === 'dev' ? `${version}-dev.4.2` : version);
+      }
+    }
+  }
 });
 
 test('init 在独立工作副本生成测试版本，保持源码日志不变', async t => {

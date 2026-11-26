@@ -1,6 +1,6 @@
 {
   "name": "@sonicloud/dsh-sonicloud-device",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "DeepSeek Harness 智能鼠标、多设备设置与共享语音服务",
   "icon": "./src/client/assets/sonicloud.png",
   "type": "module",
@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/host/index.mjs",
     "./client": "./dist/client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "src/asr",
@@ -24,7 +25,8 @@
     "native",
     "docs",
     "CHANGELOG.md",
-    "CHANGELOG.zh.md"
+    "CHANGELOG.zh.md",
+    "locale"
   ],
   "dsh": {
     "bundle": {

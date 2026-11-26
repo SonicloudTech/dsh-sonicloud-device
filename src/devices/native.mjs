@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { EventEmitter } from 'node:events';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +11,7 @@ export class MouseSdk extends EventEmitter {
     const target = `${process.platform}-${process.arch}`;
     const filename = process.platform === 'win32' ? 'uMouseSdk.dll' : 'libuMouseSdk.dylib';
     const path = this.config.libraryPath ?? fileURLToPath(new URL(`../../native/${target}/${filename}`, import.meta.url));
-    if (!existsSync(path)) throw new Error(`当前平台 ${target} 缺少鼠标 SDK，请配置匹配的动态库`);
+    if (!existsSync(path)) throw new Error(msg('error.sdk'));
     const child = fork(fileURLToPath(new URL('./native-worker.mjs', import.meta.url)), [path], {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: [],
     });
@@ -27,7 +28,7 @@ export class MouseSdk extends EventEmitter {
       finally { diagnosing = false; }
     };
     this.starting = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { child.kill(); reject(new Error('鼠标 SDK 启动超时')); }, 15000);
+      const timer = setTimeout(() => { child.kill(); reject(new Error(msg('error.timeout'))); }, 15000);
       child.on('message', message => {
         if (message.type === 'ready') {
           clearTimeout(timer); resolve(message.version);
@@ -49,23 +50,23 @@ export class MouseSdk extends EventEmitter {
         clearInterval(this.diagnosticTimer);
         clearTimeout(timer);
         if (this.child === child) this.child = undefined;
-        for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('鼠标 SDK 已停止')); }
+        for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error(msg('error.sdk'))); }
         this.pending.clear();
-        reject(new Error('鼠标 SDK 未能启动'));
-        if (!this.stopping) this.emit('fault', '鼠标 SDK 已停止，请重新启用插件');
+        reject(new Error(msg('error.sdk')));
+        if (!this.stopping) this.emit('fault', msg('error.sdk'));
       };
       child.once('exit', failed); child.once('error', failed);
     });
     return this.starting;
   }
   command(command, fields = {}) {
-    if (!this.child?.connected) return Promise.reject(new Error('鼠标 SDK 未连接'));
+    if (!this.child?.connected) return Promise.reject(new Error(msg('error.sdk')));
     const requestId = ++this.serial;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error('鼠标指令超时')); }, 3000);
+      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error(msg('error.timeout'))); }, 3000);
       this.pending.set(requestId, { resolve, reject, timer });
       this.child.send({ command, requestId, ...fields }, error => {
-        if (error) { clearTimeout(timer); this.pending.delete(requestId); reject(new Error('鼠标指令发送失败')); }
+        if (error) { clearTimeout(timer); this.pending.delete(requestId); reject(new Error(msg('error.device'))); }
       });
     });
   }

@@ -1,3 +1,4 @@
+import { buildPluginMetadata } from '../locales.mjs';
 import { build } from 'esbuild';
 import { cp, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -23,12 +24,13 @@ export async function fingerprint(root) {
       for (const name of (await readdir(path)).sort()) await walk(`${relative}/${name}`);
     } else entries.push([relative, String(info.mtimeNs), String(info.ctimeNs), String(info.size), String(info.ino)]);
   }
-  for (const path of ['src', 'docs', 'native', 'package.json', 'package-lock.json', 'cordis.patch.yml']) await walk(path);
+  for (const path of ['src', 'docs', 'native', 'README.md', 'README.zh.md', 'package.json', 'package-lock.json', 'cordis.patch.yml']) await walk(path);
   return JSON.stringify(entries);
 }
 
 export async function prepareBuild(root, runtime) {
   const { clientBuildOptions } = await import('../client-build.mjs');
+  await buildPluginMetadata(pathToFileURL(root + '/'));
   const revision = randomUUID();
   const generation = join(runtime, 'generations', revision);
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
@@ -74,6 +76,9 @@ export async function apply(ctx, config) {
     await cp(join(root, 'native'), join(generation, 'native'), { recursive: true });
     return { revision, generation, async publish() {
       await mkdir(join(runtime, 'dist'), { recursive: true });
+      await cp(join(root, 'locale'), join(runtime, 'locale'), { recursive: true });
+      for (const file of ['README.md', 'README.zh.md']) await cp(join(root, file), join(runtime, file));
+      await cp(join(root, 'docs/images'), join(runtime, 'docs/images'), { recursive: true });
       await cp(join(root, 'src/client/assets'), join(runtime, 'src/client/assets'), { recursive: true });
       // The client entry must exist before Harness composes the package for the first time.
       try { await stat(join(runtime, 'dist/client.js')); }
@@ -82,7 +87,7 @@ export async function apply(ctx, config) {
       catch (error) { if (error.code !== 'EEXIST') throw error; }
       const developmentManifest = { name: manifest.name, version: manifest.version, description: manifest.description,
         icon: manifest.icon, private: true, type: 'module',
-        main: './host.mjs', exports: { '.': './host.mjs', './client': './dist/client.js', './package.json': './package.json' },
+        main: './host.mjs', exports: { '.': './host.mjs', './client': './dist/client.js', './package.json': './package.json', './locale/*.json': './locale/*.json' },
         dsh: manifest.dsh, dependencies: manifest.dependencies, peerDependencies: manifest.peerDependencies, engines: manifest.engines };
       await writeIfChanged(join(runtime, 'package.json'), JSON.stringify(developmentManifest, null, 2) + '\n');
       const patch = await readFile(join(root, 'cordis.patch.yml'), 'utf8');

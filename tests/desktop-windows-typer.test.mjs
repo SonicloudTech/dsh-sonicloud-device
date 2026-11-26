@@ -34,7 +34,7 @@ namespace Sonicloud {
             if (engine.End() != 0) throw new Exception("session end failed");
             engine.Close();
             if (engine.context != IntPtr.Zero) throw new Exception("close must clear context");
-            if (!TyperEngine.ErrorText(-4).Contains("拒绝")) throw new Exception("access denied text");
+            if (TyperEngine.ErrorText(-4) != "panel.denied") throw new Exception("access denied text");
             if (!TyperEngine.ErrorText(-99).Contains("-99")) throw new Exception("generic text keeps code");
             Console.WriteLine("typer smoke passed: version=" + version);
         }

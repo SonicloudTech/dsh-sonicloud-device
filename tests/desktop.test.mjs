@@ -43,14 +43,14 @@ test('native IPC keeps transcripts out of arguments, guards sessions and release
 });
 test('helper failure and timeout reject pending work; a closed helper cannot restart', async () => {
   const fixture = nativeFixture({ silent: true, timeoutMs: 10 });
-  await assert.rejects(fixture.panel.begin({ id: 'timeout' }), /超时/);
+  await assert.rejects(fixture.panel.begin({ id: 'timeout' }), /"key":"error\.timeout"/);
   assert.equal(fixture.child.killed, true);
   await fixture.panel.close();
-  await assert.rejects(fixture.panel.begin({ id: 'late' }), /已关闭/);
+  await assert.rejects(fixture.panel.begin({ id: 'late' }), /"key":"error\.closed"/);
   const broken = nativeFixture({ silent: true });
   const pending = broken.panel.begin({ id: 'broken' });
   broken.child.emit('error', new Error('ENOENT'));
-  await assert.rejects(pending, /不可用/); await broken.panel.close();
+  await assert.rejects(pending, /"key":"error\.panel"/); await broken.panel.close();
 });
 test('Windows helper runs hidden with only its script path in process arguments', async () => {
   const { panel, launches } = nativeFixture({ platform: 'win32' });
@@ -158,7 +158,7 @@ test('native cancel and a helper crash stop speech and suppress late translation
     resolve('迟到译文'); await new Promise(done => setImmediate(done));
     assert.deepEqual(s.results, []);
     await s.key('down'); s.desktop.onFault(); await until(() => !s.manager.run);
-    assert.ok(s.events.some(e => e.type === 'failed' && /浮层/.test(e.message)));
+    assert.ok(s.events.some(e => e.type === 'failed' && /"key":"error\.panel"/.test(e.message)));
   } finally { await s.manager.close(); }
 });
 test('failure to create the native panel releases capture without starting recognition', async () => {
@@ -169,4 +169,26 @@ test('failure to create the native panel releases capture without starting recog
     assert.deepEqual(s.results, []);
     assert.ok(s.events.some(e => e.type === 'failed' && e.message === '浮层不可用'));
   } finally { await s.manager.close(); }
+});
+
+test('浮层首次获得字典，语音中切换语言仅更新文案且保留会话', async () => {
+  for (const platform of ['darwin', 'win32']) {
+    const { panel, messages, launches } = nativeFixture({ platform });
+    panel.setLocale('ja'); assert.equal(launches.length, 0);
+    await panel.begin({ id: 'ongoing', action: 'voice_input' });
+    assert.equal(messages[0].command, 'locale');
+    assert.equal(messages[0].dictionary['panel.copy'], '結果をコピー');
+    panel.event({ type: 'preview', sessionId: 'ongoing', text: '原始识别文字' });
+    const count = messages.length;
+    panel.setLocale('ru');
+    assert.equal(messages.length, count + 1);
+    assert.equal(messages.at(-1).command, 'locale');
+    assert.equal(messages.at(-1).language, 'ru');
+    assert.equal(panel.sessionId, 'ongoing');
+    assert.equal(messages.filter(item => item.command === 'begin').length, 1);
+    assert.equal(messages.filter(item => item.text === '原始识别文字').length, 1);
+    assert.equal(launches.length, 1);
+    await panel.close();
+    panel.setLocale('fr'); assert.equal(launches.length, 1);
+  }
 });

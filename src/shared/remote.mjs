@@ -10,7 +10,7 @@ const catalog = z.object({ revision: z.number().int(), activeId: id, services: z
 const device = z.object({
   id: text, sn: z.string(), type: z.string(), name: z.string(), connection: z.enum(['usb', 'ble']),
   battery: z.number().nullable(), identityConfirmed: z.boolean(), dpiState: z.string(),
-  dpiRaw: z.number().optional(), revision: z.number().optional(), preferences: storedPreferencesSchema.optional(),
+  defaultName: z.boolean().optional(), dpiRaw: z.number().optional(), revision: z.number().optional(), preferences: storedPreferencesSchema.optional(),
 });
 const devices = z.object({ status: text, devices: z.array(device), recognitionLanguages: z.array(z.string()), translationReady: z.boolean() });
 const session = { sessionId: z.string() };
@@ -35,6 +35,7 @@ const define = (method, params, result, extra = {}) => ({
 export const REMOTE = {
   package: PACKAGE,
   descriptors: [
+    define('syncLocale', [['request', z.object({ active: z.string().min(1).max(80), resolved: z.enum(['zh', 'en', 'ja', 'es', 'fr', 'de', 'ru', 'pt']), revision: z.number().int().nonnegative() }).strict()]], z.boolean()),
     define('catalog', [], catalog),
     define('devices', [], devices),
     define('captureScreenshot', [], z.boolean()),

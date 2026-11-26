@@ -1,3 +1,4 @@
+import { message as msg } from '../src/shared/i18n.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -81,7 +82,7 @@ test('截图失败及 helper 异步错误提示不终止语音，关闭后解除
   } finally { await s.stop(); }
   assert.equal(closed, 1);
   assert.equal(screenshot.listenerCount('notice'), 0);
-  await assert.rejects(s.manager.captureScreenshot(), /插件已关闭/);
+  await assert.rejects(s.manager.captureScreenshot(), /"key":"error\.closed"/);
 });
 
 test('界面截图无需连接鼠标或占有语音会话', async () => {
@@ -105,7 +106,7 @@ test('SN preferences isolate devices, survive reconnect, reject stale writes and
   assert.equal((await store.get('0002')).preferences.mAction, 'enter');
   assert.equal((await new DeviceStore(credentials).get('0001')).preferences.punctuation, false);
   assert.deepEqual(await services.catalog(), before);
-  await assert.rejects(store.save('0001', 0, defaultPreferences()), /已变更/);
+  await assert.rejects(store.save('0001', 0, defaultPreferences()), /"key":"error\.settings"/);
   for (const sn of ['usb-temp', 'ble-aa', '__proto__', '']) await assert.rejects(store.get(sn));
 });
 test('legacy preferences enable AI auto-send and explicit false survives storage reload', async () => {
@@ -148,7 +149,7 @@ test('temporary identities restore saved preferences and reject conflicting devi
     assert.equal(devices[0].battery, 75);
     assert.equal(devices[1].identityConfirmed, true);
     assert.deepEqual((await s.manager.store.get('0001')).preferences, saved.preferences);
-    assert.ok(s.events.some(event => event.type === 'failed' && /SN 冲突/.test(event.message)));
+    assert.ok(s.events.some(event => event.type === 'failed' && /"key":"error\.device"/.test(event.message)));
   } finally { await s.stop(); }
 });
 test('unregistered SDK warnings are delivered and queue overflow cancels the active session', async () => {
@@ -163,7 +164,7 @@ test('unregistered SDK warnings are delivered and queue overflow cancels the act
     assert.ok(s.events.some(event => event.type === 'notice' && event.message === 'SDK 警告'));
     await s.send({ type: 'message', id: 'unknown', message: { type: 'queueOverflow' } });
     await until(() => !s.manager.run);
-    assert.ok(s.events.some(event => event.type === 'failed' && /音频丢失/.test(event.message)));
+    assert.ok(s.events.some(event => event.type === 'failed' && /"key":"error\.audio"/.test(event.message)));
     assert.deepEqual(s.sdk.sources, ['0001', '']);
   } finally { await s.stop(); }
 });
@@ -180,7 +181,7 @@ test('two devices share one session; B audio, key release and disconnect never c
     await s.key('0001', 'up'); await until(() => !s.manager.run);
     assert.equal(s.audio.length, 1); assert.equal(s.audio[0][0], '0001'); assert.equal(s.audio[0][1][0], 1);
     assert.equal(s.events.filter(e => e.type === 'result').length, 1);
-    assert.ok(s.events.some(e => e.type === 'notice' && /正在进行/.test(e.message)));
+    assert.ok(s.events.some(e => e.type === 'notice' && /"key":"error\.busy"/.test(e.message)));
     assert.deepEqual(s.sdk.sources, ['0001', '']);
   } finally { await s.stop(); }
 });
@@ -319,7 +320,7 @@ test('DPI uses firmware bytes, preserves failure state and retries; channel chan
   try {
     await s.connect('0001'); s.sdk.dpi = async () => 0;
     const prefs = { ...defaultPreferences(), dpi: '800' };
-    const saved = await s.manager.save('0001', 0, prefs); assert.match(saved.message, /下发失败/);
+    const saved = await s.manager.save('0001', 0, prefs); assert.match(saved.message, /"key":"settings\.savedDpi"/);
     s.sdk.dpi = FakeSdk.prototype.dpi;
     await s.manager.save('0001', 1, prefs); assert.deepEqual(s.sdk.dpis, [['0001', 21]]);
     await s.send({ type: 'disconnected', id: '0001', mode: 0 }); await s.connect('0001', 1);
@@ -347,7 +348,7 @@ test('hardware DPI reports update only their device, persist, deduplicate and ne
       assert.equal(s.manager.view().devices[0].revision, revision);
     }
     assert.deepEqual(s.sdk.dpis, []);
-    await assert.rejects(s.manager.save('0001', 0, defaultPreferences()), /已变更/);
+    await assert.rejects(s.manager.save('0001', 0, defaultPreferences()), /"key":"error\.settings"/);
     await s.send({ type: 'disconnected', id: '0001', mode: 0 }); await s.connect('0001', 1);
     assert.equal(s.manager.view().devices.find(device => device.sn === '0001').preferences.dpi, '2400');
     assert.deepEqual(s.sdk.dpis, [['0001', 63]]);
@@ -403,7 +404,7 @@ test('bounded PCM packets preserve callback boundaries and pad only the tail', (
   const values = [], p = new PcmPackets(chunk => values.push(Buffer.from(chunk, 'base64')));
   p.write(Buffer.alloc(3198, 1)); p.write(Buffer.alloc(8, 2)); p.flush();
   assert.deepEqual(values.map(v => v.length), [3200, 82]); assert.equal(values[0][3198], 2); assert.equal(values[1][5], 2); assert.equal(values[1][6], 0);
-  assert.throws(() => p.write(Buffer.alloc(1)), /格式/);
+  assert.throws(() => p.write(Buffer.alloc(1)), /"key":"error\.audio"/);
 });
 test('language mapping preserves dialect and script distinctions, and never silently falls back to Chinese', () => {
   assert.deepEqual(recognitionQuery(defaultPreferences(), 'voice_input'), { lid: '0', lanid: '0', role: '0' });
@@ -412,8 +413,8 @@ test('language mapping preserves dialect and script distinctions, and never sile
   assert.equal(recognitionQuery({ ...defaultPreferences(), recognition: traditional }, 'voice_input').lanid, '100');
   assert.equal(recognitionQuery({ ...defaultPreferences(), from: 'en' }, 'translate').lanid, '1');
   const hakka = { language: 'zh_cn', accent: 'hakkanese', rlang: '' };
-  assert.throws(() => recognitionQuery({ ...defaultPreferences(), recognition: hakka }, 'voice_input'), /重新选择/);
-  assert.throws(() => recognitionQuery({ ...defaultPreferences(), from: 'mn' }, 'translate'), /重新选择/);
+  assert.throws(() => recognitionQuery({ ...defaultPreferences(), recognition: hakka }, 'voice_input'), /"key":"error\.language"/);
+  assert.throws(() => recognitionQuery({ ...defaultPreferences(), from: 'mn' }, 'translate'), /"key":"error\.language"/);
 });
 test('documented settings contain mapped recognition and translation sources, retaining Mongolian only as a target', () => {
   assert.equal(REC_LANG_LIST.length, 43);
@@ -433,10 +434,10 @@ test('removed saved languages remain readable but cannot be saved or executed, i
   const device = { id: '0001', sn: '0001', type: 'smart-mouse', name: '智能鼠标', connection: 'usb', battery: null, identityConfirmed: true, dpiState: 'unknown', ...saved };
   REMOTE.descriptors.find(item => item.method === 'devices').result.create().parse({ status: '就绪', devices: [device], recognitionLanguages: [], translationReady: false });
   await assert.rejects(store.save('0001', 4, legacy));
-  assert.throws(() => recognitionQuery(legacy, 'voice_input', [{ ...legacy.recognition, query: { lanid: '0' } }]), /重新选择/);
-  assert.throws(() => recognitionQuery(legacy, 'speechSearch'), /重新选择/);
-  assert.throws(() => recognitionQuery({ ...defaultPreferences(), from: 'mn' }, 'translate'), /重新选择/);
-  assert.throws(() => recognitionQuery({ ...defaultPreferences(), to: 'ii' }, 'translate'), /重新选择/);
+  assert.throws(() => recognitionQuery(legacy, 'voice_input', [{ ...legacy.recognition, query: { lanid: '0' } }]), /"key":"error\.language"/);
+  assert.throws(() => recognitionQuery(legacy, 'speechSearch'), /"key":"error\.language"/);
+  assert.throws(() => recognitionQuery({ ...defaultPreferences(), from: 'mn' }, 'translate'), /"key":"error\.language"/);
+  assert.throws(() => recognitionQuery({ ...defaultPreferences(), to: 'ii' }, 'translate'), /"key":"error\.language"/);
   const corrected = { ...legacy, recognition: defaultPreferences().recognition, from: 'cn', to: 'en' };
   assert.deepEqual(await store.save('0001', 4, corrected), { revision: 5, preferences: corrected });
   assert.deepEqual((await store.get('0002')).preferences, defaultPreferences());
@@ -492,7 +493,7 @@ test('URLs allow omitted protocols without rewriting input, storage or browser a
   }
   await assert.rejects(systemAction('openUrl', 'example.com', {
     platform: 'darwin', execute: async () => ({ stdout: '' }),
-  }), /浏览器打开失败/);
+  }), /"key":"error\.browser"/);
 });
 
 test('removed M actions fall back on read, preserve other preferences and cannot be saved or executed', async () => {
@@ -515,7 +516,7 @@ test('removed M actions fall back on read, preserve other preferences and cannot
       let called = false;
       await assert.rejects(systemAction('backHome', undefined, {
         platform, execute: async () => { called = true; },
-      }), /不支持此按键动作/);
+      }), /"key":"error\.action"/);
       assert.equal(called, false);
     }
   } finally { await s.stop(); }
@@ -543,7 +544,7 @@ test('device categories coexist and unknown categories do not execute mouse bind
     assert.deepEqual(devices.map(d => d.type), ['smart-mouse', 'keyboard']);
     assert.equal(devices[1].preferences, undefined);
     await s.key('0002', 'down'); assert.equal(s.manager.run, undefined);
-    await assert.rejects(s.manager.save('0002', 0, defaultPreferences()), /不支持/);
+    await assert.rejects(s.manager.save('0002', 0, defaultPreferences()), /"key":"error\.settings"/);
   } finally { await s.stop(); }
 });
 test('service configuration is captured when the hardware key starts the session', async () => {
@@ -587,11 +588,11 @@ test('USB ownership diagnosis clears on connection and cannot overwrite an onlin
     await f.send({ type: 'diagnostic', message: '鼠标 USB 数据接口被 ClawMouse 占用' });
     assert.match(f.manager.view().status, /ClawMouse/);
     await f.connect('FF0E254204000933');
-    assert.equal(f.manager.view().status, '设备已连接');
+    assert.equal(f.manager.view().status, msg('status.connected'));
     await f.send({ type: 'diagnostic', message: '迟到的占用诊断' });
-    assert.equal(f.manager.view().status, '设备已连接');
+    assert.equal(f.manager.view().status, msg('status.connected'));
     assert.equal(f.manager.view().devices.length, 1);
     await f.send({ type: 'disconnected', id: 'FF0E254204000933', mode: 0 });
-    assert.match(f.manager.view().status, /重新查找/);
+    assert.match(f.manager.view().status, /"key":"status\.searching"/);
   } finally { await f.stop(); }
 });

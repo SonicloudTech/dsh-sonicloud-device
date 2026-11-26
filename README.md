@@ -14,12 +14,14 @@ Use your Sonicloud smart mouse to dictate, translate, and search in desktop apps
 
 Supports Apple silicon Macs and Windows x64. The plugin identifies your mouse and connects to the services automatically, with no authentication details to enter.
 
+The plugin UI and desktop voice overlay follow the Harness language: Chinese, English, Japanese, Spanish, French, German, Russian, and Brazilian Portuguese. No separate language selection is needed, and speech recognition and translation languages are unchanged. The separate screenshot UI is excluded.
+
 ## Installation and activation
 
-1. Open DeepSeek Harness and select **Plugins (插件)** in the sidebar.
-2. Click **Add Plugin (添加插件)** in the upper-right corner.
-3. Enter **@sonicloud/dsh-sonicloud-device** and click **Install (安装)**.
-4. Once installed, enable the plugin and open **Settings → Sonicloud Devices (设置 → 声云设备)** to view and configure your mouse.
+1. Open DeepSeek Harness and select **Plugins** in the sidebar.
+2. Click **Add Plugin** in the upper-right corner.
+3. Enter **@sonicloud/dsh-sonicloud-device** and click **Install**.
+4. Once installed, enable the plugin and open **Settings → Sonicloud Devices** to view and configure your mouse.
 
 On macOS, initial activation and reconnection check typing and screenshot permissions. Sonicloud Devices keeps the setup guidance available; see [first-time permissions](#first-time-permissions-on-macos).
 
@@ -37,7 +39,7 @@ On macOS, initial activation and reconnection check typing and screenshot permis
 | Buttons and sensitivity | Assign Enter, Backspace, Open Link, or other actions to the M button, and adjust mouse DPI |
 | Multiple mice | View each mouse's connection, battery level, and serial number, and save its language, button, and sensitivity settings separately |
 
-Manage these options in **Settings → Sonicloud Devices (设置 → 声云设备)**. Changes save automatically. **Restore Defaults (恢复默认)** resets only the current mouse, and reconnecting restores its saved settings. The left navigation bar also shows a **Sonicloud Devices (声云设备)** panel with the same device management UI by default; use the Sidebar (侧边栏) switch on the Sonicloud Devices title row to hide or restore it. Hiding the panel does not affect the settings page.
+Manage these options in **Settings → Sonicloud Devices**. Changes save automatically. **Restore Defaults** resets only the current mouse, and reconnecting restores its saved settings. The left navigation bar also shows a **Sonicloud Devices** panel with the same device management UI by default; use the Sidebar switch on the Sonicloud Devices title row to hide or restore it. Hiding the panel does not affect the settings page.
 
 ![Sonicloud Devices settings showing mouse information, voice typing, translation, and DPI options](docs/images/sonicloud-device.png)
 
@@ -45,7 +47,7 @@ Manage these options in **Settings → Sonicloud Devices (设置 → 声云设�
 
 ### First-time permissions on macOS
 
-After enabling the plugin, open **Sonicloud Devices (声云设备)** and grant the permissions you need:
+After enabling the plugin, open **Sonicloud Devices** and grant the permissions you need:
 
 | Component | Permission and purpose |
 | --- | --- |
@@ -53,7 +55,7 @@ After enabling the plugin, open **Sonicloud Devices (声云设备)** and grant t
 | screenhelper | Screen Recording: required for screenshots; the capture overlay stays closed until permission is granted |
 | screenhelper | Accessibility: optional for automatic scrolling; regular screenshots and manual scrolling remain available |
 
-Click the corresponding **Authorize (授权)** button to let that component request permission. Confirm manually in the system prompt or **System Settings → Privacy & Security**, then click **Authorized, Check Again (已授权，重新检查)**. If a component is missing from the list, expand its location in the page and add it by that path. The plugin checks and guides setup; it never confirms system permissions for you.
+Click the corresponding **Authorize** button to let that component request permission. Confirm manually in the system prompt or **System Settings → Privacy & Security**, then click **Authorized, Check Again**. If a component is missing from the list, expand its location in the page and add it by that path. The plugin checks and guides setup; it never confirms system permissions for you.
 
 Sonicloud Voice now uses a Developer ID signature. If an older version is already checked but the plugin still reports missing permission, follow the system prompts to authorize it again and restart Harness, then recheck.
 
@@ -76,24 +78,24 @@ On Windows, recognized text is typed live into the focused field character by ch
 
 Holding the AI button brings Harness to the foreground, even when it is minimized or hidden in the tray. If you are on an AI conversation page, it uses that conversation; otherwise, it creates one. You do not need to focus the input field. Recognized text is appended to the existing draft.
 
-With **Auto-send (自动发送)** enabled, the complete draft and attachments are submitted. Turn it off to review and send the text manually. This setting is saved per mouse, and each recording uses the setting captured when the button was pressed. If you switch pages or conversations during recording, the result still goes to the captured conversation. If conversation creation or insertion fails, the overlay keeps the result available to copy; on Windows it also shows a one-click submit button — open the target input and click it to type the text into the focused field.
+With **Auto-send** enabled, the complete draft and attachments are submitted. Turn it off to review and send the text manually. This setting is saved per mouse, and each recording uses the setting captured when the button was pressed. If you switch pages or conversations during recording, the result still goes to the captured conversation. If conversation creation or insertion fails, the overlay keeps the result available to copy; on Windows it also shows a one-click submit button — open the target input and click it to type the text into the focused field.
 
 ### Search and Open Link
 
-Voice search uses the current mouse's recognition language and selected search engine. For **Open Link (一键链接)**, enter a URL and click **Confirm (确认)**; you can omit `https://` or `http://`. Searching and opening links do not require a focused input field. Non-voice M button actions run when you release the button.
+Voice search uses the current mouse's recognition language and selected search engine. For **Open Link**, enter a URL and click **Confirm**; you can omit `https://` or `http://`. Searching and opening links do not require a focused input field. Non-voice M button actions run when you release the button.
 
 ### Screenshots
 
-Press the mouse capture button or click **Start Screenshot (开始截图)** at the bottom of **Sonicloud Devices (声云设备)**, then select a region in the separate capture UI. The capture process is bundled. The UI button also works without a connected mouse. Repeated triggers while capturing report that a capture is already in progress. Press `Esc` to leave region selection. Disabling the plugin or quitting Harness closes the capture process and pinned image windows.
+Press the mouse capture button or click **Start Screenshot** at the bottom of **Sonicloud Devices**, then select a region in the separate capture UI. The capture process is bundled. The UI button also works without a connected mouse. Repeated triggers while capturing report that a capture is already in progress. Press `Esc` to leave region selection. Disabling the plugin or quitting Harness closes the capture process and pinned image windows.
 
 On macOS, complete [first-time permissions](#first-time-permissions-on-macos) before taking a screenshot. Cloud service integration for OCR, image translation, and Word export is outside this integration.
 
 ## Update or uninstall
 
-Find the Sonicloud smart mouse plugin under **Plugins → Installed (插件 → 已安装)** in Harness.
+Find the Sonicloud smart mouse plugin under **Plugins → Installed** in Harness.
 
-- **Update**: Select **Update (更新)** from the plugin's actions menu and follow the confirmation prompts.
-- **Uninstall**: Select **Uninstall (卸载)** from the plugin's actions menu and follow the confirmation prompts.
+- **Update**: Select **Update** from the plugin's actions menu and follow the confirmation prompts.
+- **Uninstall**: Select **Uninstall** from the plugin's actions menu and follow the confirmation prompts.
 
 ## Troubleshooting
 

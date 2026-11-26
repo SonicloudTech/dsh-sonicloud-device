@@ -25,8 +25,8 @@ test('USB diagnosis differentiates absent receiver, waiting hardware and externa
   const diagnose = stdout => diagnoseUsb(999, { platform: 'darwin', execute: async (file, args) => {
     assert.equal(file, '/usr/sbin/ioreg'); assert.deepEqual(args, ['-r', '-n', 'uMouse', '-l', '-w', '0']); return { stdout };
   } });
-  assert.match(await diagnose(tree()), /ClawMouse 占用/);
-  assert.match(await diagnose(tree(999, 'DeepSeek Harness')), /已检测到 2.4G 接收器/);
-  assert.match(await diagnose(''), /请插入 2.4G 接收器/);
+  assert.match(await diagnose(tree()), /"key":"status\.occupied"/);
+  assert.match(await diagnose(tree(999, 'DeepSeek Harness')), /"key":"status\.receiver"/);
+  assert.match(await diagnose(''), /"key":"status\.searching"/);
   assert.equal(await diagnoseUsb(999, { platform: 'win32', execute: () => { throw new Error('must not run'); } }), '');
 });

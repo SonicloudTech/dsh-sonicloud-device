@@ -1,8 +1,9 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { BUILTIN_ASR } from './config.mjs';
 import { isStableSn } from '../shared/devices.mjs';
 
 export function createTokenRequest({ sn }) {
-  if (!isStableSn(sn)) throw new Error('设备身份未确认，请重新连接鼠标');
+  if (!isStableSn(sn)) throw new Error(msg('error.device'));
   return { sn };
 }
 
@@ -26,24 +27,24 @@ export function createTokenProvider(config, fetchImpl = globalThis.fetch, lifeti
       });
       payload = await response.json();
     } catch (error) {
-      if (signal.aborted && !entry.abort.signal.aborted && !lifetime?.aborted) throw new Error('Token 获取超时，请稍后重试');
+      if (signal.aborted && !entry.abort.signal.aborted && !lifetime?.aborted) throw new Error(msg('error.timeout'));
       signal.throwIfAborted();
       if (!isStableSn(service.sn)) throw error;
-      throw new Error('Token 获取失败，请检查网络后重试');
+      throw new Error(msg('error.auth'));
     }
     signal.throwIfAborted();
     if (!response.ok || payload?.code !== 0) {
       const messages = {
-        4001: '设备身份无效，请重新连接鼠标', 1001: '设备鉴权参数错误，请联系服务方',
-        1002: '设备鉴权失败，请联系服务方', 1008: 'License 设备数量已达上限',
+        4001: msg('error.device'), 1001: msg('error.auth'),
+        1002: msg('error.auth'), 1008: msg('error.deviceLimit'),
       };
-      throw new Error(messages[payload?.code] ?? 'Token 获取失败，请稍后重试');
+      throw new Error(messages[payload?.code] ?? msg('error.auth'));
     }
     const { token, expire_time: expiry } = payload.data ?? {};
     if (typeof token !== 'string' || !token.trim() || !Number.isSafeInteger(expiry) || expiry <= Date.now() / 1000) {
-      throw new Error('Token 响应无效或已过期，请稍后重试');
+      throw new Error(msg('error.auth'));
     }
-    if (entry.generation !== generation) throw new Error('Token 请求已失效');
+    if (entry.generation !== generation) throw new Error(msg('error.auth'));
     cachedToken = token; expiresAt = expiry * 1000;
     return token;
   }

@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.1.4 - 2026-11-26
+
+### Added
+
+- Automatically follow the Harness language in the plugin UI, feedback and desktop voice overlay for Chinese, English, Japanese, Spanish, French, German, Russian and Portuguese, preserving drafts and voice sessions; the separate screenshot UI is excluded.
+- Localize the plugin name and use the Chinese README for Chinese descriptions and the English README for all other languages.
+
+### Fixed
+
+- Update the CI package allowlist to accept and require all eight language metadata files and dictionaries, fixing packaging failures caused by treating locale resources as non-release files.
+- Prevent credential scanning from mistaking translation keys such as `panel.password` for password settings while retaining checks for actual credentials.
+- Restore horizontal labels and controls at normal settings-dialog widths by removing premature stacked layout rules, while preserving long-text wrapping.
+- Extend npm publication verification, reconcile the original package after upload timeouts or connection failures, and retry temporary registry and download errors to avoid false failures after publication; integrity mismatches still fail.
+- Read CI release notes from the latest non-empty changelog section on every branch, whether Unreleased or a numbered version, independently of the branch or package version.
+
+## 0.1.3 - 2026-11-20
 
 ### Added
 

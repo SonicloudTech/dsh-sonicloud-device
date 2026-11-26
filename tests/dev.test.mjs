@@ -14,7 +14,7 @@ import { MemoryCredentials } from './helpers.mjs';
 async function fixture(t) {
   await mkdir('work', { recursive: true });
   const root = await mkdtemp(resolve('work/dev-test-'));
-  for (const name of ['src', 'docs', 'scripts', 'package.json', 'package-lock.json', 'cordis.patch.yml']) {
+  for (const name of ['README.md', 'README.zh.md', 'src', 'docs', 'scripts', 'package.json', 'package-lock.json', 'cordis.patch.yml']) {
     await cp(resolve(name), join(root, name), { recursive: true });
   }
   await mkdir(join(root, 'native'));
@@ -36,9 +36,14 @@ test('development generation reloads nested Host code and only publishes Client 
   const first = await prepareBuild(root, runtime); await first.publish();
   const initialClient = await readFile(join(runtime, 'dist/client.js'), 'utf8');
   const source = join(root, 'src/asr/config.mjs');
-  await writeFile(source, (await readFile(source, 'utf8')).replace("name: '声云 ASR'", "name: '热更新声云'"));
+  await writeFile(source, (await readFile(source, 'utf8')).replace("name: 'Sonicloud ASR'", "name: '热更新声云'"));
   await writeFile(join(root, 'src/client/styles.css'), (await readFile(join(root, 'src/client/styles.css'), 'utf8')) + '\n.dev-test { color: red; }\n');
+  const metadataSource = join(root, 'src/shared/locales/en.json');
+  const labels = JSON.parse(await readFile(metadataSource, 'utf8'));
+  labels['app.plugin'] = 'Sonicloud updated title';
+  await writeFile(metadataSource, JSON.stringify(labels));
   const second = await prepareBuild(root, runtime); await second.publish();
+  assert.equal(JSON.parse(await readFile(join(runtime, 'locale/en.json'), 'utf8')).meta.title, 'Sonicloud updated title');
   assert.equal(await readFile(join(runtime, 'dist/client.js'), 'utf8'), initialClient);
   const ctx = new Context();
   const credentials = new MemoryCredentials(); ctx.provide('credentials', credentials);

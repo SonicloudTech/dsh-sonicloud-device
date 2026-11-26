@@ -1,34 +1,35 @@
+import { message as msg } from './i18n.mjs';
 import { z } from 'zod';
 import { REC_LANG_LIST, TRANS_FROM_LANG_LIST, TRANS_TO_LANG_LIST } from './languages.mjs';
 import { DPI_LIST, M_KEY_FUNC_LIST, M_KEY_SEARCH_URL_LIST } from './mouse-settings.mjs';
 export { REC_LANG_LIST, TRANS_FROM_LANG_LIST, TRANS_TO_LANG_LIST, DPI_LIST, M_KEY_FUNC_LIST, M_KEY_SEARCH_URL_LIST };
 export const languageKey = ({ language, accent, rlang }) => JSON.stringify([language, accent, rlang]);
-const choice = list => z.string().refine(value => list.some(item => item.value === value), '选项不存在');
+const choice = list => z.string().refine(value => list.some(item => item.value === value), msg('error.settings'));
 const recognitionValueSchema = z.object({ language: z.string(), accent: z.string(), rlang: z.string() }).strict();
 export const recognitionSchema = recognitionValueSchema
-  .refine(value => REC_LANG_LIST.some(item => languageKey(item) === languageKey(value)), '识别语言不存在');
+  .refine(value => REC_LANG_LIST.some(item => languageKey(item) === languageKey(value)), msg('error.language'));
 export function webUrl(value) {
   let text = value.trim();
   const hasProtocol = /^https?:\/\//i.test(text);
   if (!hasProtocol) {
     // A host followed by a numeric port is not a URI scheme. The prefix is for parsing only.
     if (/^[a-z][a-z\d+.-]*:/i.test(text) && !/^[^:/?#]+:\d+(?:[/?#]|$)/u.test(text)) {
-      throw new Error('请填写有效的 HTTP/HTTPS 网址');
+      throw new Error(msg('error.url'));
     }
-    if (/^https?:/i.test(text)) throw new Error('请填写有效的网址');
+    if (/^https?:/i.test(text)) throw new Error(msg('error.url'));
     text = `https://${text}`;
   }
-  if (!/^https?:\/\/[^/\\\s]/i.test(text) || value.trim().length > 4096) throw new Error('请填写有效的网址（最多 4096 字符）');
+  if (!/^https?:\/\/[^/\\\s]/i.test(text) || value.trim().length > 4096) throw new Error(msg('error.url'));
   let url;
-  try { url = new URL(text); } catch { throw new Error('请填写完整 HTTP/HTTPS 地址'); }
+  try { url = new URL(text); } catch { throw new Error(msg('error.url')); }
   if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password || /[\\\u0000-\u0020\u007f]/u.test(text)) {
-    throw new Error('请填写不含凭据和空白字符的 HTTP/HTTPS 地址');
+    throw new Error(msg('error.url'));
   }
   if (!hasProtocol && !url.hostname.includes('.') && !url.hostname.startsWith('[') && url.hostname !== 'localhost') {
-    throw new Error('请填写有效的域名或 IP 地址');
+    throw new Error(msg('error.url'));
   }
   if (!url.hostname.startsWith('[') && url.hostname.replace(/\.$/, '').split('.').some(label => !/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(label))) {
-    throw new Error('请填写有效的域名或 IP 地址');
+    throw new Error(msg('error.url'));
   }
   return value.trim();
 }
@@ -55,11 +56,11 @@ export const defaultPreferences = () => ({
   searchUrl: M_KEY_SEARCH_URL_LIST[0].value, linkUrl: '', speechAction: 'voice_input', aiAction: 'openAi', aiAutoSend: true,
 });
 export const snSchema = z.string().min(1).max(128).refine(value =>
-  !/^(usb-|ble-)/i.test(value) && !/[\u0000-\u0020]/u.test(value) && !['__proto__', 'prototype', 'constructor'].includes(value), '设备 SN 未确认');
+  !/^(usb-|ble-)/i.test(value) && !/[\u0000-\u0020]/u.test(value) && !['__proto__', 'prototype', 'constructor'].includes(value), msg('device.identity'));
 export const isStableSn = value => snSchema.safeParse(value).success;
 export function searchAddress(prefix, text) {
-  if (!M_KEY_SEARCH_URL_LIST.some(item => item.value === prefix)) throw new Error('搜索引擎不存在');
-  if (!text.trim()) throw new Error('未识别到语音');
+  if (!M_KEY_SEARCH_URL_LIST.some(item => item.value === prefix)) throw new Error(msg('error.settings'));
+  if (!text.trim()) throw new Error(msg('error.noSpeech'));
   return prefix + encodeURIComponent(text.trim());
 }
 

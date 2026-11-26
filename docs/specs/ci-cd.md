@@ -19,8 +19,8 @@ GitHub 仓库：[SonicloudTech/dsh-sonicloud-device](https://github.com/Soniclou
 
 - 正式版本以 `package.json.version` 为准，必须是未发布、比当前正式版高的稳定 SemVer 版本；`package-lock.json` 同步更新。CI 不自动提交版本修改。
 - 测试版本格式：`<目标正式版本>-dev.<run_number>.<run_attempt>`，例如 `0.3.0-dev.128.1`；仅修改 CI 工作副本中的包版本及锁文件。
-- 开发阶段在两份 CHANGELOG 的“未发布 / Unreleased”中维护变更；正式发布前，建议移入对应版本和日期章节，保留顶部未发布章节——未折叠时发布流程自动回退采用未发布章节内容，完全折叠（无未发布章节）时直接采用当前版本章节。格式遵循 [项目规范](../../AGENTS.md)。
-- 测试运行摘要读取当前提交的中文“未发布”章节，标明“本轮累计变更”；正式运行摘要读取当前版本章节（无版本章节时回退读取未发布章节），附对应提交的完整日志链接。
+- 所有分支统一按 [项目规范](../../AGENTS.md) 读取 CHANGELOG 中最新的非空章节，跳过空章节，不依赖分支或 `package.json.version`；所选版本已撤回时停止发布。
+- 测试和正式运行摘要均展示上述中文章节，标明“最新变更”，附对应提交的完整日志链接。
 - 无变更说明、正式版本重复或中英文版本/日期/分类/条目结构不一致时，停止发布并报告原因；翻译内容一致性由维护者确认。
 
 ## 3. 构建与分发
@@ -31,7 +31,7 @@ GitHub 仓库：[SonicloudTech/dsh-sonicloud-device](https://github.com/Soniclou
 - 包内必须包含 `dist/client.js`、宿主源码、`cordis.patch.yml`、平台原生库及许可证；不得包含开发链接产物、测试凭据或发布密钥。包名迁移后验证 patch 引用和安装入口。
 - 每次打包生成 `.tgz`、校验文件和发布信息（版本、提交 SHA、工作流地址）；包名与文件名从打包结果读取，不硬编码。
 - 测试产物上传 Actions Artifact，保留 30 天；运行摘要提供下载地址及有效期。下载后解压外层归档获得 `.tgz`。下载需要登录 GitHub；公开仓库的 Artifact 不作为内部保密分发渠道。[下载规则](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/download-workflow-artifacts)
-- 正式产物与发布信息先存入 Artifact，保留 30 天供重跑核对；再发布已经检查的同一份 `.tgz`，指定 `--access public --tag latest`。发布后等待 npm 异步处理（最多 3 分钟），查询并下载 npm 产物，确认版本、`latest`、SRI 和 SHA-256 一致；运行摘要提供 npm 版本页面和该版本 `dist.tarball` 下载地址。
+- 正式产物与发布信息先存入 Artifact，保留 30 天供重跑核对；再发布已经检查的同一份 `.tgz`，指定 `--access public --tag latest`。发布后等待 npm 异步处理（最多 15 分钟，含查询和下载耗时），确认版本、`latest`、SRI 和 SHA-256 一致；发布 job 上限为 25 分钟。运行摘要提供 npm 版本页面和该版本 `dist.tarball` 下载地址。
 - CI 通过仅代表自动化验证通过；推送到 `main` 前完成 [README 使用流程](../../README.zh.md) 中与本次变更相关的实机验证。
 
 测试包与正式包的安装、更新和旧包迁移见 [README](../../README.zh.md#安装与启用)。
@@ -93,6 +93,7 @@ npm publish /绝对路径/已检查的正式包.tgz --access public --tag latest
 
 - 测试、构建或包检查失败：停止上传和发布，在 Actions 运行摘要中记录失败阶段，仅展示实际可用的产物链接。
 - 正式发布串行执行，不取消正在进行的发布；新发布不得使 `latest` 回退。发布前再次核对 npm 版本状态，重复版本不覆盖。
+- 上传命令最多执行一次；命令超时或连接中断后继续核对原包。确认阶段重试临时网络错误、HTTP 408/429/5xx 和下载节点的 404；鉴权、元数据及完整性错误立即失败。超过等待窗口仍无法确认时保留失败状态，按原产物重跑核对。
 - 同一次运行重试时，恢复该运行保存的正式 Artifact 并重新执行测试，不重新打包；记录必须匹配仓库、提交 SHA、运行 ID、包名、版本和哈希。若 npm 已存在该版本，再核对 npm 完整性与 `latest`；一致则补全摘要，不一致、产物过期或记录缺失则失败。
 - 重跑前确认原 Artifact 仍可下载；仅发布 job 失败时优先重跑失败 job，保留构建结果。若原 Artifact 已不可用，不用新打包结果冒充原产物，也不重新发布已存在版本；核查首次发布结果后，后续改动使用新版本。
 - 已发布问题版本通过新修复版本替代，不自动删除或覆盖现有 npm 版本。
@@ -112,4 +113,4 @@ npm publish /绝对路径/已检查的正式包.tgz --access public --tag latest
 | OIDC 发布 | [`0.1.1` 第 1 次尝试](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/42595306280/attempts/1)通过；当时 `latest=0.1.1`，SRI、SHA-256 及 provenance 的仓库、分支、工作流、提交均匹配 |
 | 产物缺失保护 | [`0.1.1` 第 2 次尝试](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/42595306280/attempts/2)在 preflight 停止，未重新打包或重复发布；原 Artifact 列表为空、ID 查询返回 404，消失原因未确定，首次 npm 发布不受影响 |
 
-尚未完成平台验收：原 Artifact 可用时的成功恢复分支；该分支已通过本地测试。
+2026-11-25 排查确认：[`0.1.3` 首次运行](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/44687320296/attempts/1)的发布步骤于 2026-11-20 14:26:31（北京时间）失败，而 npm 记录的发布时间为 14:33:47，超过原 3 分钟确认窗口；完整步骤日志未取得，无法区分命令超时和确认超时。11 月 23 日[仅重跑发布 job](https://github.com/SonicloudTech/dsh-sonicloud-device/actions/runs/44687320296/attempts/2)成功，验证了原 Artifact 可用时的恢复路径。延长窗口和超时自动核对的修复仍待后续正式发布验证。

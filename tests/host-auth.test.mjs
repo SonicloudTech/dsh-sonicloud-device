@@ -89,7 +89,7 @@ test('refresh failure, cancellation and shared connection deadline stop ASR with
     await task;
     assert.equal(count, 2); assert.equal(f.sockets.length, 1); assert.equal(f.uploads.length, 0);
     if (mode === 'cancel') { assert.deepEqual(f.events, []); assert.ok(refreshSignal.aborted); }
-    else { assert.equal(f.events.length, 1); assert.match(f.events[0].message, mode === 'timeout' ? /连接超时/ : /License/); }
+    else { assert.equal(f.events.length, 1); assert.match(f.events[0].message, mode === 'timeout' ? /"key":"error\.timeout"/ : /"key":"error\.deviceLimit"/); }
   }
 });
 

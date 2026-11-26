@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { randomUUID } from 'node:crypto';
 import { AsyncQueue } from '../devices/queue.mjs';
 
@@ -19,7 +20,7 @@ export class AiConversationBridge {
     } finally {
       signal.removeEventListener('abort', abort); this.clients.delete(client); client.queue.end(true);
       for (const [id, session] of this.sessions) {
-        if (session.client === client) this.release(id, 'AI 对话连接已断开，结果可复制');
+        if (session.client === client) this.release(id, msg('error.ai'));
       }
     }
   }
@@ -31,18 +32,18 @@ export class AiConversationBridge {
     if (!session.client) return;
     pending.sent = true;
     try { session.client.queue.push(pending.message); }
-    catch { pending.reject(new Error('AI 对话连接繁忙，请重试')); }
+    catch { pending.reject(new Error(msg('error.ai'))); }
   }
   request(sessionId, operation, signal, text, autoSend) {
     signal.throwIfAborted();
-    if (this.closed || !this.sessions.has(sessionId)) return Promise.reject(new Error('AI 对话连接不可用'));
+    if (this.closed || !this.sessions.has(sessionId)) return Promise.reject(new Error(msg('error.ai')));
     const requestId = randomUUID();
     return new Promise((resolve, reject) => {
       const cleanup = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); this.requests.delete(requestId); };
       const fail = error => { cleanup(); reject(error); };
-      const abort = () => fail(new Error('AI 语音会话已取消'));
+      const abort = () => fail(new Error(msg('error.ai')));
       const timer = setTimeout(() => {
-        fail(new Error('AI 对话未响应，结果可复制'));
+        fail(new Error(msg('error.ai')));
         this.release(sessionId);
       }, this.timeoutMs);
       const pending = { message: { requestId, sessionId, operation, expiresAt: Date.now() + this.timeoutMs, ...(text === undefined ? {} : { text, autoSend }) },
@@ -62,10 +63,10 @@ export class AiConversationBridge {
     const session = pending && this.sessions.get(pending.message.sessionId);
     if (!pending?.sent || session?.client?.clientId !== clientId) return false;
     if (ok) pending.resolve();
-    else pending.reject(new Error('AI 对话无法创建、填充或自动发送，结果可复制'));
+    else pending.reject(new Error(msg('error.ai')));
     return true;
   }
-  release(sessionId, message = 'AI 语音会话已结束') {
+  release(sessionId, message = msg('error.ai')) {
     const session = this.sessions.get(sessionId);
     this.sessions.delete(sessionId);
     for (const pending of this.requests.values()) {

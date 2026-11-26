@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { defaultPreferences, preferencesSchema, storedPreferencesSchema, snSchema } from '../shared/devices.mjs';
 // 保留旧存储键，继续读取重命名前保存的配置。
 const KEY = 'dsh-asr/devices';
@@ -6,7 +7,7 @@ export class DeviceStore {
   async state() {
     let record = await this.credentials.readRecord(KEY);
     if (!record) record = await this.credentials.modifyRecord(KEY, current => current ?? { kind: 'grant', payload: { version: 1, devices: {} } });
-    if (record?.kind !== 'grant' || record.payload?.version !== 1 || !record.payload.devices) throw new Error('设备配置无法读取');
+    if (record?.kind !== 'grant' || record.payload?.version !== 1 || !record.payload.devices) throw new Error(msg('error.settings'));
     return structuredClone(record.payload);
   }
   async get(sn) {
@@ -35,7 +36,7 @@ export class DeviceStore {
     await this.credentials.modifyRecord(KEY, record => {
       const state = structuredClone(record.payload);
       const saved = state.devices[sn];
-      if ((saved?.revision ?? 0) !== revision) throw new Error('设备配置已变更，请刷新后重试');
+      if ((saved?.revision ?? 0) !== revision) throw new Error(msg('error.settings'));
       state.devices[sn] = { revision: revision + 1, preferences };
       return { kind: 'grant', payload: state };
     });

@@ -1,3 +1,4 @@
+import { message as msg } from '../src/shared/i18n.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -20,7 +21,7 @@ function fixture(options = {}) {
       callback?.();
       if (message.command === 'close' && !options.hangClose) { child.connected = false; queueMicrotask(() => child.emit('exit', 0)); }
       else if (message.command === 'capture' && !options.silent) queueMicrotask(() => child.emit('message', {
-        type: 'reply', requestId: message.requestId, ok: !options.busy, message: '截图正在进行，请先完成或取消当前截图',
+        type: 'reply', requestId: message.requestId, ok: !options.busy, message: msg('error.busy'),
       }));
     };
     children.push(child);
@@ -43,9 +44,9 @@ test('截图按需共用后台进程，明确忙碌状态并正常退出', async
   assert.deepEqual(f.messages.map(m => m.trigger).filter(Boolean), ['mouse', 'ui']);
   const closing = f.service.close(); assert.strictEqual(f.service.close(), closing); await closing;
   assert.equal(f.children[0].killed, undefined);
-  await assert.rejects(f.service.capture(), /已关闭/);
+  await assert.rejects(f.service.capture(), /"key":"error\.closed"/);
   const busy = fixture({ busy: true });
-  await assert.rejects(busy.service.capture(), /截图正在进行/); await busy.service.close();
+  await assert.rejects(busy.service.capture(), /"key":"error\.busy"/); await busy.service.close();
 });
 
 test('子进程故障取消在途请求，并允许下一次截图重启', async () => {
@@ -55,7 +56,7 @@ test('子进程故障取消在途请求，并允许下一次截图重启', async
   const pending = f.service.capture();
   await Promise.resolve();
   f.children[0].emit('exit', 1);
-  await assert.rejects(pending, /已停止/);
+  await assert.rejects(pending, /"key":"error\.screenshot"/);
   assert.equal(f.service.pending.size, 0);
   await f.service.start(); assert.equal(f.launches.length, 2);
   f.children[0].emit('message', { type: 'fatal' });
@@ -66,7 +67,7 @@ test('子进程故障取消在途请求，并允许下一次截图重启', async
 });
 
 test('启动失败、超时与通信失败均能收尾和重试', async () => {
-  for (const [options, pattern] of [[{ noReady: true }, /启动超时/], [{ silent: true }, /响应超时/], [{ sendError: true }, /发送失败/]]) {
+  for (const [options, pattern] of [[{ noReady: true }, /"key":"error\.timeout"/], [{ silent: true }, /"key":"error\.timeout"/], [{ sendError: true }, /"key":"error\.screenshot"/]]) {
     const f = fixture(options);
     await assert.rejects(f.service.capture(), pattern);
     assert.equal(f.children[0].killed, true);
@@ -75,31 +76,31 @@ test('启动失败、超时与通信失败均能收尾和重试', async () => {
   const fatal = fixture({ noReady: true });
   const pending = fatal.service.capture();
   fatal.children[0].emit('message', { type: 'fatal' });
-  await assert.rejects(pending, /加载失败/); await fatal.service.close();
+  await assert.rejects(pending, /"key":"error\.screenshot"/); await fatal.service.close();
 });
 
 test('关闭时阻止迟到启动和截图，失联子进程强制退出', async () => {
   const f = fixture({ noReady: true, hangClose: true });
   const capture = f.service.capture();
-  const rejected = assert.rejects(capture, /已关闭/);
+  const rejected = assert.rejects(capture, /"key":"error\.closed"/);
   await f.service.close(); await rejected;
   assert.equal(f.children[0].killed, true);
   assert.equal(f.messages.filter(m => m.command === 'capture').length, 0);
   let ready;
   const mac = fixture({ platform: 'darwin', arch: 'arm64', prepareMac: () => new Promise(resolve => { ready = resolve; }) });
-  const late = mac.service.capture(); const lateRejected = assert.rejects(late, /已关闭/);
+  const late = mac.service.capture(); const lateRejected = assert.rejects(late, /"key":"error\.closed"/);
   await mac.service.close(); ready({ libraryPath: '/cache/lib.dylib', helperPath: '/cache/screenhelper' });
   await lateRejected; assert.equal(mac.launches.length, 0);
 });
 
 test('不支持的平台与缺失组件不启动后台进程，Mac使用已准备路径', async () => {
   const unsupported = fixture({ platform: 'linux' });
-  await assert.rejects(unsupported.service.capture(), /当前平台不支持截图/);
+  await assert.rejects(unsupported.service.capture(), /"key":"error\.screenshot"/);
   const missing = fixture({ exists: () => false });
-  await assert.rejects(missing.service.capture(), /组件缺失/);
+  await assert.rejects(missing.service.capture(), /"key":"error\.screenshot"/);
   assert.equal(missing.launches.length, 0);
   const brokenMac = fixture({ platform: 'darwin', arch: 'arm64', prepareMac: async () => { throw new Error('private path'); } });
-  await assert.rejects(brokenMac.service.capture(), /组件准备失败/);
+  await assert.rejects(brokenMac.service.capture(), /"key":"error\.permission"/);
   const mac = fixture({ platform: 'darwin', arch: 'arm64', prepareMac: async () => ({ libraryPath: '/cache/lib.dylib', helperPath: '/cache/app/screenhelper' }) });
   await mac.service.capture(); assert.deepEqual(mac.launches[0][1], ['/cache/lib.dylib', '/cache/app/screenhelper']);
   await mac.service.close();
@@ -158,7 +159,7 @@ test('worker退出等待在途FFI和helper断连，销毁屏障后才注销回�
       import { appendFileSync } from 'node:fs';
       const trace = event => appendFileSync(${JSON.stringify(tracePath)}, JSON.stringify(event) + '\\n');
       let eventCallback, inCallback = false;
-      const emit = event => { inCallback = true; eventCallback(null, JSON.stringify({ type: event }), null, 0); inCallback = false; };
+      const emit = event => { inCallback = true; eventCallback(null, JSON.stringify(typeof event === 'string' ? { type: event } : event), null, 0); inCallback = false; };
       export default {
         proto: value => value, pointer: value => value,
         register: value => value, unregister: () => trace('unregister'),
@@ -173,6 +174,7 @@ test('worker退出等待在途FFI和helper断连，销毁屏障后才注销回�
               setTimeout(() => { trace('connected'); emit('connected'); }, 5);
               setTimeout(() => { trace('connect_return'); callback(null, 0); }, 80); return;
             }
+            if (name === 'sct_query_state') setTimeout(() => emit({ type: 'state_report', perm_screen: true, perm_a11y: true }), 2);
             if (name === 'sct_set_config') {
               const config = JSON.parse(args[1]);
               if (config.ocr_visible !== false || config.trans_enabled !== false) throw new Error('unsupported menus visible');

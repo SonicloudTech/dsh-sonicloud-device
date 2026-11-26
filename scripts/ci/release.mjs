@@ -36,12 +36,30 @@ async function output(values) {
     Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(''));
 }
 
-export async function registryMetadata(fetchImpl = fetch) {
+class RegistryHttpError extends Error {
+  constructor(message, status) {
+    super(`${message}：HTTP ${status}`);
+    this.status = status;
+  }
+}
+
+function transientRegistryError(error) {
+  return [408, 429].includes(error.status) || error.status >= 500 && error.status <= 599
+    || ['TimeoutError', 'AbortError'].includes(error.name)
+    || ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'EPIPE',
+      'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET']
+      .includes(error.cause?.code ?? error.code);
+}
+
+const requestSignal = (timeoutMs, signal) => signal
+  ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
+
+export async function registryMetadata(fetchImpl = fetch, signal) {
   const response = await fetchImpl(`${REGISTRY}/${encodeURIComponent(PACKAGE)}`, {
-    headers: { accept: 'application/json', 'cache-control': 'no-cache' }, signal: AbortSignal.timeout(30000),
+    headers: { accept: 'application/json', 'cache-control': 'no-cache' }, signal: requestSignal(30000, signal),
   });
   if (response.status === 404) return null;
-  assert.ok(response.ok, `npm 查询失败：HTTP ${response.status}，不视为新包`);
+  if (!response.ok) throw new RegistryHttpError('npm 查询失败，不视为新包', response.status);
   const metadata = await response.json();
   assert.equal(metadata.name, PACKAGE, 'npm 返回了不同的包');
   assert.ok(metadata.versions && typeof metadata.versions === 'object', 'npm 版本信息无效');
@@ -52,7 +70,7 @@ async function initialize() {
   const ctx = context();
   const pkg = await json('package.json'), lock = await json('package-lock.json');
   validateManifest(pkg, lock);
-  const notes = releaseNotes(await readFile('CHANGELOG.zh.md', 'utf8'), await readFile('CHANGELOG.md', 'utf8'), pkg.version, ctx.branch);
+  const notes = releaseNotes(await readFile('CHANGELOG.zh.md', 'utf8'), await readFile('CHANGELOG.md', 'utf8'));
   const version = ctx.branch === 'dev' ? developmentVersion(pkg.version, ctx.runNumber, ctx.attempt) : pkg.version;
   const state = { ...ctx, name: pkg.name, version, notes,
     artifactName: ctx.branch === 'main' ? `release-${ctx.runId}` : `dev-${ctx.runId}-${ctx.attempt}` };
@@ -159,7 +177,7 @@ async function pack() {
   console.log(`已检查 ${result.files.length} 个文件；SHA-256：${record.sha256}`);
 }
 
-export async function verifyRegistry(record, metadata, fetchImpl = fetch) {
+export async function verifyRegistry(record, metadata, fetchImpl = fetch, signal) {
   const version = metadata?.versions?.[record.version];
   assert.equal(version?.name, record.name, 'npm 包尚不可见或包名错误');
   assert.equal(version.version, record.version, 'npm 版本错误');
@@ -167,23 +185,65 @@ export async function verifyRegistry(record, metadata, fetchImpl = fetch) {
   assert.equal(version.dist?.integrity, record.integrity, 'npm 完整性不匹配');
   const url = new URL(version.dist.tarball);
   assert.equal(url.origin, REGISTRY, 'npm tarball 地址必须属于官方 registry');
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(60000) });
-  assert.ok(response.ok, `下载 npm 产物失败：HTTP ${response.status}`);
+  const response = await fetchImpl(url, { signal: requestSignal(60000, signal) });
+  if (!response.ok) throw new RegistryHttpError('下载 npm 产物失败', response.status);
   assert.equal(hash(Buffer.from(await response.arrayBuffer())), record.sha256, 'npm 实际安装包 SHA-256 不匹配');
   return url.href;
 }
 
-export async function awaitPublication(record, { readMetadata = registryMetadata, verify = verifyRegistry,
-  pause = delay, attempts = 37 } = {}) {
-  // npm 接受上传后可能异步处理数分钟；只有版本和标签可见后才核对实际 tarball。
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const metadata = await readMetadata();
-    if (metadata?.versions?.[record.version] && metadata['dist-tags']?.latest === record.version) {
-      return verify(record, metadata);
+export async function awaitPublication(record, {
+  readMetadata = signal => registryMetadata(fetch, signal),
+  verify = (saved, metadata, signal) => verifyRegistry(saved, metadata, fetch, signal),
+  pause = delay, timeoutMs = 15 * 60 * 1000, intervalMs = 5000,
+  now = () => performance.now(), log = console.log,
+} = {}) {
+  // 使用实际截止时间，查询和下载耗时也计入预算；npm 异步处理曾超过 10 分钟。
+  const deadline = now() + timeoutMs, signal = AbortSignal.timeout(timeoutMs);
+  log(`开始核对 npm ${record.version}，最多等待 ${timeoutMs / 60000} 分钟。`);
+  let lastState = '版本尚不可见';
+  while (now() < deadline) {
+    try {
+      const metadata = await readMetadata(signal);
+      const version = metadata?.versions?.[record.version];
+      if (version) {
+        assert.equal(version.name, record.name, 'npm 包名错误');
+        assert.equal(version.version, record.version, 'npm 版本错误');
+        assert.equal(version.dist?.integrity, record.integrity, 'npm 完整性不匹配');
+        if (metadata['dist-tags']?.latest === record.version) {
+          // 刚发布时元数据可能先于下载节点就绪，仅在此阶段重试 tarball 404。
+          try { return await verify(record, metadata, signal); }
+          catch (error) { if (error.status !== 404) throw error; lastState = error.message; }
+        } else lastState = `latest 尚未指向 ${record.version}`;
+      } else lastState = '版本尚不可见';
+    } catch (error) {
+      if (signal.aborted) break;
+      if (!transientRegistryError(error)) throw error;
+      lastState = error.message;
     }
-    if (attempt + 1 < attempts) await pause(5000);
+    const remaining = deadline - now();
+    if (remaining <= 0 || signal.aborted) break;
+    log(`等待 npm 发布确认：${lastState}；剩余 ${Math.ceil(remaining / 1000)} 秒。`);
+    await pause(Math.min(intervalMs, remaining));
   }
-  throw new Error('npm 已接受发布，但在 3 分钟内未确认版本和 latest；请重跑以核对原产物，不要重复手动发布。');
+  throw new Error(`npm 发布结果未确认：在 ${timeoutMs / 60000} 分钟内未确认版本、latest 和下载完整性（${lastState}）；请重跑以核对原产物，不要重复手动发布。`);
+}
+
+export async function publishAndVerify(record, { execute = run, waitForPublication = awaitPublication,
+  log = console.log, warn = console.warn } = {}) {
+  // 上传只调用一次；客户端超时不能证明 registry 没有接受上传。
+  log(`开始上传 ${record.name}@${record.version}，命令超时上限为 3 分钟。`);
+  try {
+    const { stdout, stderr } = await execute('npm', ['publish', resolve(artifactDir, record.filename), '--ignore-scripts',
+      '--access', 'public', '--tag', 'latest', `--registry=${REGISTRY}/`], { maxBuffer: 4 * 1024 * 1024, timeout: 180000 });
+    if (stdout) log(stdout.trim());
+    if (stderr) log(stderr.trim());
+  } catch (error) {
+    if (!error.killed && !transientRegistryError(error)
+      && !/\b(?:ETIMEDOUT|ETIMEOUT|ECONNRESET|EAI_AGAIN|ECONNABORTED|EPIPE)\b/.test(error.stderr ?? '')) throw error;
+    warn('npm publish 超时或连接中断，结果未知；开始核对原产物，不重复上传。');
+    if (error.stderr) warn(error.stderr.trim());
+  }
+  return waitForPublication(record);
 }
 
 async function publish() {
@@ -192,13 +252,7 @@ async function publish() {
   const pkg = await json('package.json');
   const record = await verifyBundle(artifactDir, { ...ctx, name: pkg.name, version: pkg.version });
   const decision = publicationDecision(await registryMetadata(), record.version, record, ctx);
-  if (decision === 'publish') {
-    // 不安装依赖、不执行生命周期脚本；只发布 build job 检查过的同一份 tarball。
-    const { stdout } = await run('npm', ['publish', resolve(artifactDir, record.filename), '--ignore-scripts',
-      '--access', 'public', '--tag', 'latest', `--registry=${REGISTRY}/`], { maxBuffer: 4 * 1024 * 1024, timeout: 180000 });
-    console.log(stdout.trim());
-  }
-  const tarball = await awaitPublication(record);
+  const tarball = decision === 'publish' ? await publishAndVerify(record) : await awaitPublication(record);
   await mkdir('work', { recursive: true });
   await writeJson('work/published.json', { version: record.version, name: record.name, tarball,
     page: `https://www.npmjs.com/package/${record.name}/v/${record.version}`, recovered: decision === 'verify' });
@@ -219,7 +273,7 @@ export async function summary(env = process.env) {
     try { state = await json(join(artifactDir, 'release.json')); } catch { /* 无已检查产物。 */ }
   }
   if (state) lines.push(`版本：\`${state.name}@${state.version}\``,
-    `### ${ctx.branch === 'dev' ? '本轮累计变更' : '本版本变更'}`, `<pre>${escapeHtml(state.notes)}</pre>`);
+    '### 最新变更', `<pre>${escapeHtml(state.notes)}</pre>`);
   if (env.ARTIFACT_URL && /^https:\/\/github\.com\/SonicloudTech\/dsh-sonicloud-device\/actions\/runs\/\d+\/artifacts\/\d+$/.test(env.ARTIFACT_URL)) {
     lines.push(`[下载已检查产物](${env.ARTIFACT_URL})（上传后保留 30 天；重跑不延长保留期；需登录 GitHub，下载后解压外层归档获取 .tgz）。`);
     try { const record = await json(join(artifactDir, 'release.json')); lines.push(`SHA-256：\`${record.sha256}\``); } catch { /* 仅有原产物链接。 */ }

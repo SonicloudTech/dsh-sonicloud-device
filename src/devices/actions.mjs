@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { webUrl } from '../shared/devices.mjs';
@@ -15,9 +16,9 @@ export async function systemAction(action, value, { platform = process.platform,
           const result = await execute('/usr/bin/osascript', ['-l', 'JavaScript', '-e',
             "ObjC.import('CoreServices'); ObjC.unwrap(ObjC.castRefToObject($.LSCopyDefaultHandlerForURLScheme($('http'))));"], commandOptions);
           const browser = result.stdout.trim();
-          if (!/^[a-z\d][a-z\d.-]+$/i.test(browser)) throw new Error('默认浏览器不可用');
+          if (!/^[a-z\d][a-z\d.-]+$/i.test(browser)) throw new Error(msg('error.browser'));
           args = ['-n', '-b', browser, '--args', url];
-        } catch { throw new Error('浏览器打开失败，请检查默认浏览器'); }
+        } catch { throw new Error(msg('error.browser')); }
       }
     }
     else if (platform === 'win32') { file = 'rundll32.exe'; args = ['url.dll,FileProtocolHandler', url]; }
@@ -29,7 +30,7 @@ export async function systemAction(action, value, { platform = process.platform,
       backspace: 'tell application "System Events" to key code 51',
       openAi: 'tell application "DeepSeek Harness" to activate',
     };
-    if (!scripts[action]) throw new Error('不支持此按键动作');
+    if (!scripts[action]) throw new Error(msg('error.action'));
     args = ['-e', scripts[action]];
   } else if (platform === 'win32') {
     file = 'powershell.exe';
@@ -44,9 +45,9 @@ export async function systemAction(action, value, { platform = process.platform,
       // without any window, so the Electron overrides must be stripped before handing off.
       openAi: "$p=Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if($p){ Add-Type -Namespace Win -Name Native -MemberDefinition '[DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);[DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd);'; [Win.Native]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; if([Win.Native]::SetForegroundWindow($p.MainWindowHandle)){ exit 0 } }; Remove-Item Env:\\ELECTRON_RUN_AS_NODE, Env:\\ELECTRON_NO_ATTACH_CONSOLE, Env:\\ELECTRON_NO_ASAR -ErrorAction SilentlyContinue; $exe=(Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue | Select-Object -First 1).Path; if($exe){ Start-Process -FilePath $exe -ArgumentList 'dsh://open'; exit 0 }; Start-Process -FilePath rundll32.exe -ArgumentList 'url.dll,FileProtocolHandler','dsh://open' -WindowStyle Hidden; exit 0",
     };
-    if (!scripts[action]) throw new Error('不支持此按键动作');
+    if (!scripts[action]) throw new Error(msg('error.action'));
     args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(scripts[action], 'utf16le').toString('base64')];
-  } else throw new Error('当前平台尚不支持此系统按键动作');
+  } else throw new Error(msg('error.action'));
   try { await execute(file, args, commandOptions); }
-  catch { throw new Error(action === 'openUrl' ? '浏览器打开失败，请检查默认浏览器' : '系统动作执行失败，请检查辅助功能权限及宿主运行状态'); }
+  catch { throw new Error(action === 'openUrl' ? msg('error.browser') : msg('error.action')); }
 }

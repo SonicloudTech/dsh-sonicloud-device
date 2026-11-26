@@ -1,3 +1,5 @@
+import { registerLocale } from './locale.mjs';
+import { NAMESPACE } from '../shared/i18n.mjs';
 import React from 'react';
 import { closeTopModal } from '@deepseek-ai/dsh-client-ui-primitives';
 import { REMOTE } from '../shared/remote.mjs';
@@ -10,8 +12,9 @@ import { Notice } from './Notice.jsx';
 import { SonicloudIcon } from './SonicloudIcon.jsx';
 import { SidebarPanelPreference, attachSidebarPanel } from './sidebar-panel.mjs';
 import css from './styles.css';
-export const inject = ['remote', 'slots'];
+export const inject = ['remote', 'slots', 'locale', 'configForms'];
 export async function apply(ctx) {
+  const locale = registerLocale(ctx);
   const preferences = new SidebarPanelPreference(typeof localStorage === 'undefined' ? undefined : localStorage);
   const unmountRemote = await ctx.remote.$mount(REMOTE);
   const view = new AiConversationView({ document, closeTopModal });
@@ -19,7 +22,7 @@ export async function apply(ctx) {
   try {
     ui = ctx.inject(['remote.asr', 'slots'], scope => {
       const api = scope.remote.asr;
-      const controller = new DeviceController(api);
+      const controller = new DeviceController(api, { locale });
       scope.effect(() => {
         const style = document.createElement('style'); style.textContent = css;
         style.dataset.dshAsr = ''; document.head.append(style);
@@ -27,13 +30,13 @@ export async function apply(ctx) {
         return () => { controller.dispose(); style.remove(); };
       });
       scope.slots.inject('settings.section', () => scope.slots.register({
-        name: 'settings.section', id: 'dsh-sonicloud-device', order: 11, label: () => '声云设备', inject: () => ({ api, controller, sidebar: preferences }),
+        name: 'settings.section', id: 'dsh-sonicloud-device', order: 11, label: () => locale.t('app.title'), locale: NAMESPACE, inject: () => ({ api, controller, sidebar: preferences }),
       }, Devices));
       scope.slots.inject('settings.section.icon', () => scope.slots.register({
         name: 'settings.section.icon', id: 'dsh-sonicloud-device',
       }, SonicloudIcon));
       scope.slots.inject('shell.overlay', () => scope.slots.register({
-        name: 'shell.overlay', id: 'dsh-sonicloud-device-notice', inject: () => ({ controller }),
+        name: 'shell.overlay', locale: NAMESPACE, id: 'dsh-sonicloud-device-notice', inject: () => ({ controller }),
       }, Notice));
       scope.slots.inject('conversation.input.overlay', () => scope.slots.register({
         name: 'conversation.input.overlay', id: 'dsh-sonicloud-device-ai-target', inject: () => ({ view }),
@@ -41,7 +44,7 @@ export async function apply(ctx) {
       scope.effect(() => attachSidebarPanel(scope, {
         icon: SonicloudIcon, panel: DevicesPanel,
         props: () => ({ controller, sidebar: preferences }),
-        preferences,
+        preferences, label: () => locale.t('app.title'),
       }));
     });
     await ui;

@@ -1,7 +1,9 @@
+import { buildPluginMetadata } from './locales.mjs';
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { clientBuildOptions } from './client-build.mjs';
 const { version } = JSON.parse(await readFile('package.json', 'utf8'));
+await buildPluginMetadata();
 await mkdir('dist', { recursive: true });
 await build({
   ...clientBuildOptions, outfile: 'dist/client.js',

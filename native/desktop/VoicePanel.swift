@@ -141,7 +141,7 @@ final class WaveformView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        setAccessibilityElement(true); setAccessibilityLabel("语音处理中")
+        setAccessibilityElement(true); setAccessibilityLabel("Processing speech")
         for bar in bars { bar.backgroundColor = NSColor.systemGreen.cgColor; bar.cornerRadius = 1.5; layer?.addSublayer(bar) }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -176,13 +176,37 @@ final class Panel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
+// 文案由插件通过私有 IPC 下发；结果文本始终原样显示。
+final class VoiceLocale {
+    static var dictionary: [String: String] = [:]
+    static func encode(_ key: String, _ params: [String: Any] = [:]) -> String {
+        let data = try! JSONSerialization.data(withJSONObject: ["key": key, "params": params], options: [.sortedKeys])
+        return "sonicloud:" + String(data: data, encoding: .utf8)!
+    }
+    static func text(_ value: String, _ depth: Int = 0) -> String {
+        if value.isEmpty { return "" }
+        if let text = dictionary[value] { return text }
+        if depth < 5 && value.hasPrefix("sonicloud:"), let data = String(value.dropFirst(10)).data(using: .utf8),
+           let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let key = object["key"] as? String {
+            var result = dictionary[key] ?? dictionary["error.generic"] ?? "Operation failed. Please retry."
+            for (name, param) in object["params"] as? [String: Any] ?? [:] {
+                let raw = String(describing: param)
+                let translated = raw.hasPrefix("sonicloud:") || dictionary[raw] != nil ? text(raw, depth + 1) : raw
+                result = result.replacingOccurrences(of: "{" + name + "}", with: translated)
+            }
+            return result
+        }
+        return dictionary["error.generic"] ?? "Operation failed. Please retry."
+    }
+}
 final class VoiceUI: NSObject {
     let panel = Panel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     let text = NSTextField(labelWithString: "")
     let waveform = WaveformView(frame: .zero)
     let closeButton = NSButton(title: "", target: nil, action: nil)
-    let copyButton = NSButton(title: "复制结果", target: nil, action: nil)
+    let copyButton = NSButton(title: "Copy result", target: nil, action: nil)
     var session = "", preview = "", phase = "connecting", message = ""
+    var copyKey = "panel.copy"
     var active = false
     var insertion: ClipboardInsertion?
     var resultPending = false
@@ -200,14 +224,14 @@ final class VoiceUI: NSObject {
         let content = CapsuleView()
         panel.contentView = content
         text.font = .systemFont(ofSize: 15)
-        text.lineBreakMode = .byTruncatingHead
-        text.maximumNumberOfLines = 1
-        text.cell?.usesSingleLineMode = true
-        text.cell?.wraps = false
+        text.lineBreakMode = .byWordWrapping
+        text.maximumNumberOfLines = 0
+        text.cell?.usesSingleLineMode = false
+        text.cell?.wraps = true
         text.cell?.isScrollable = false
-        text.setAccessibilityLabel("语音识别结果")
+        text.setAccessibilityLabel("Speech recognition result")
         for view in [waveform, text, closeButton, copyButton] { content.addSubview(view) }
-        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "取消")?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Cancel")?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
         closeButton.imagePosition = .imageOnly
         closeButton.isBordered = false
         closeButton.contentTintColor = .secondaryLabelColor
@@ -219,14 +243,18 @@ final class VoiceUI: NSObject {
     func position() {
         let display = NSScreen.screens.first(where: { $0 == screen }) ?? NSScreen.main ?? NSScreen.screens.first
         guard let frame = display?.visibleFrame else { return }
-        let width = min(720, max(280, frame.width - 48)), height: CGFloat = 48
+        let width = min(720, max(280, frame.width - 48))
+        let copyWidth = min(width / 2, max(96, copyButton.intrinsicContentSize.width + 16))
+        let available = max(100, width - (copyButton.isHidden ? 110 : copyWidth + 116))
+        let bounds = (text.stringValue as NSString).boundingRect(with: NSSize(width: available, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: text.font!])
+        let height: CGFloat = min(frame.height / 2, max(48, ceil(bounds.height) + 24))
         panel.setFrame(NSRect(x: frame.midX - width / 2, y: frame.minY + 24, width: width, height: height), display: true)
         waveform.frame = NSRect(x: 20, y: (height - 26) / 2, width: 23, height: 26)
         closeButton.frame = NSRect(x: width - 44, y: (height - 28) / 2, width: 28, height: 28)
-        copyButton.frame = NSRect(x: width - 146, y: (height - 32) / 2, width: 96, height: 32)
+        copyButton.frame = NSRect(x: width - 50 - copyWidth, y: (height - 32) / 2, width: copyWidth, height: 32)
         let left: CGFloat = active ? 54 : 22
         let right = copyButton.isHidden ? closeButton.frame.minX : copyButton.frame.minX
-        let textHeight = ceil(text.intrinsicContentSize.height)
+        let textHeight = height - 24
         text.frame = NSRect(x: left, y: (height - textHeight) / 2, width: max(0, right - left - 12), height: textHeight)
         panel.contentView?.needsDisplay = true
         panel.invalidateShadow()
@@ -234,10 +262,14 @@ final class VoiceUI: NSObject {
     func render() {
         waveform.isHidden = !active
         waveform.animate(active)
-        closeButton.setAccessibilityLabel(active ? "取消" : "关闭")
-        closeButton.toolTip = active ? "取消" : "关闭"
+        panel.setAccessibilityLabel(VoiceLocale.text("panel.title"))
+        text.setAccessibilityLabel(VoiceLocale.text("panel.result"))
+        waveform.setAccessibilityLabel(VoiceLocale.text("panel.processing"))
+        copyButton.title = VoiceLocale.text(copyKey)
+        closeButton.setAccessibilityLabel(VoiceLocale.text(active ? "panel.cancel" : "panel.close"))
+        closeButton.toolTip = VoiceLocale.text(active ? "panel.cancel" : "panel.close")
         copyButton.isHidden = active || preview.isEmpty
-        let status = message.isEmpty ? (["finishing": "正在整理…", "translating": "正在翻译…"][phase] ?? "") : message
+        let status = message.isEmpty ? VoiceLocale.text(["finishing": "panel.finishing", "translating": "panel.translating"][phase] ?? "") : VoiceLocale.text(message)
         let fullText = [status, preview].filter { !$0.isEmpty }.joined(separator: " ")
         text.stringValue = fullText.components(separatedBy: .newlines).joined(separator: " ").replacingOccurrences(of: "\t", with: " ")
         text.toolTip = fullText
@@ -251,14 +283,14 @@ final class VoiceUI: NSObject {
     @objc func copyResult() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(preview, forType: .string)
-        copyButton.title = "已复制"
+        copyKey = "panel.copied"; render()
     }
     func finishInsertion(_ inserted: Bool, changed: Bool) {
         insertion = nil; active = false; resultPending = false
         if inserted { preview = ""; message = ""; hide() }
         else {
-            message = !AXIsProcessTrusted() ? "请授权辅助功能以回填；可复制结果"
-                : changed ? "输入目标已变化或不支持写入，可复制结果" : "此输入框不支持自动回填，可复制结果"
+            message = !AXIsProcessTrusted() ? "panel.permission"
+                : changed ? "panel.targetChanged" : "panel.targetChanged"
             render()
         }
     }
@@ -268,15 +300,20 @@ final class VoiceUI: NSObject {
     }
     func handle(_ command: [String: Any]) {
         let name = command["command"] as? String ?? ""
+        if name == "locale" {
+            if let dictionary = command["dictionary"] as? [String: String] { VoiceLocale.dictionary = dictionary }
+            if panel.isVisible { render() }
+            return
+        }
         if name == "permissions" {
             let action = command["action"] as? String ?? "check"
             guard ["check", "refresh", "accessibility"].contains(action) else {
-                if let id = command["id"] { emit(["id": id, "ok": false, "message": "不支持此打字权限操作"]) }
+                if let id = command["id"] { emit(["id": id, "ok": false, "message": VoiceLocale.encode("error.permission")]) }
                 return
             }
             if action == "accessibility" {
                 guard !active && !resultPending else {
-                    if let id = command["id"] { emit(["id": id, "ok": false, "message": "请先结束语音输入，再设置打字权限"]) }
+                    if let id = command["id"] { emit(["id": id, "ok": false, "message": VoiceLocale.encode("error.busy")]) }
                     return
                 }
                 if !AXIsProcessTrusted() {
@@ -303,7 +340,7 @@ final class VoiceUI: NSObject {
             screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) })
             insertion = ["speechSearch", "ai_input"].contains(command["action"] as? String ?? "") ? nil : ClipboardInsertion()
             resultPending = false
-            copyButton.title = "复制结果"; render()
+            copyKey = "panel.copy"; render()
         } else if !incoming.isEmpty && incoming != session { success = false }
         else if name == "result" && active && !resultPending {
             preview = command["text"] as? String ?? ""
@@ -322,7 +359,7 @@ final class VoiceUI: NSObject {
             switch command["type"] as? String {
             case "preview": if active { preview = command["text"] as? String ?? ""; render() }
             case "phase": if active { phase = command["phase"] as? String ?? phase; render() }
-            case "failed": active = false; insertion = nil; message = command["message"] as? String ?? "语音处理失败"; render()
+            case "failed": active = false; insertion = nil; message = command["message"] as? String ?? "error.generic"; render()
             case "notice": message = command["message"] as? String ?? ""; render()
             case "finished", "cancelled": active = false; insertion = nil; preview = ""; message = ""; hide()
             default: break

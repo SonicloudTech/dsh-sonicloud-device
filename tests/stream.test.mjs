@@ -64,7 +64,7 @@ test('cancel, timeout and rejection before readiness never upload buffered audio
     else {
       assert.equal(events.length, 1);
       assert.equal(events[0].type, 'error');
-      assert.match(events[0].message, mode === 'timeout' ? /连接超时/ : mode === 'auth' ? /认证失败/ : /连接中断/);
+      assert.match(events[0].message, mode === 'timeout' ? /"key":"error\.timeout"/ : mode === 'auth' ? /"key":"error\.auth"/ : /"key":"error\.connection"/);
     }
     assert.equal(invalidated, mode === 'auth' ? 1 : 0);
   }
