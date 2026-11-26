@@ -72,15 +72,15 @@ test('Windows 权限查询和授权操作不启动截图进程', async () => {
   const service = new ScreenshotService({ platform: 'win32', launch: () => assert.fail('不应启动 worker') });
   for (const action of ['check', 'screen', 'accessibility', 'refresh'])
     assert.deepEqual(await service.permissions(action), { supported: false, screenRecording: true, accessibility: true, helperApp: '' });
-  await assert.rejects(service.permissions('unknown'), /不支持/);
+  await assert.rejects(service.permissions('unknown'), /"key":"error\.permission"/);
   await service.close();
-  await assert.rejects(service.permissions(), /已关闭/);
+  await assert.rejects(service.permissions(), /"key":"error\.closed"/);
 });
 
 test('Mac 首次只查权限，缺屏幕录制权限不发截图命令，缺辅助功能仍可基本截图', async t => {
   const f = await fixture(t);
   assert.deepEqual(await f.service.permissions(), { supported: true, screenRecording: false, accessibility: false, helperApp: '/cache/screenhelper.app' });
-  await assert.rejects(f.service.capture(), /授权屏幕录制/);
+  await assert.rejects(f.service.capture(), /"key":"error\.screenPermission"/);
   assert.equal((await f.trace()).filter(event => event.name === 'sct_start_capture').length, 0);
   assert.equal((await f.trace()).filter(event => event.config?.permission_request).length, 0);
   await f.update({ perm_screen: true });
@@ -95,7 +95,7 @@ test('授权请求返回原状态，已有截图、贴图或编辑时不弹授�
   assert.deepEqual((await f.trace()).filter(event => event.config?.permission_request).map(event => event.config.permission_request), ['screen', 'accessibility']);
   for (const activity of [{ capturing: true }, { pins_alive: 1 }, { pin_editing: true }]) {
     await f.update(activity);
-    await assert.rejects(f.service.permissions('screen'), /完成当前截图或关闭贴图/);
+    await assert.rejects(f.service.permissions('screen'), /"key":"error\.screenshotBusy"/);
   }
   assert.equal((await f.trace()).filter(event => event.config?.permission_request).length, 2);
 });
@@ -116,18 +116,18 @@ test('有贴图或截图时重新检查只查询，不关闭窗口；旧组件�
   assert.equal((await f.service.permissions('refresh')).screenRecording, false);
   assert.equal((await f.trace()).filter(event => event.name === 'sct_shutdown').length, 0);
   const old = await fixture(t, {}, { oldHelper: true });
-  await assert.rejects(old.service.permissions('screen'), /不支持授权引导/);
+  await assert.rejects(old.service.permissions('screen'), /"key":"error\.permission"/);
   assert.equal((await old.trace()).filter(event => event.config?.permission_request).length, 0);
 });
 
 test('权限查询超时可重试，关闭时取消在途查询', async t => {
   const f = await fixture(t, { silent: true });
-  await assert.rejects(f.service.permissions(), /检查超时/);
+  await assert.rejects(f.service.permissions(), /"key":"error\.timeout"/);
   await f.update({ silent: false, perm_screen: true });
   assert.equal((await f.service.permissions()).screenRecording, true);
   await f.update({ silent: true });
   const pending = f.service.permissions();
-  const rejected = assert.rejects(pending, /已关闭/);
+  const rejected = assert.rejects(pending, /"key":"error\.closed"/);
   for (let i = 0; i < 100; i++) {
     if ((await f.trace()).filter(event => event.name === 'sct_query_state').length >= 3) break;
     await delay(5);

@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import koffi from 'koffi';
 import { dirname } from 'node:path';
 const path = process.argv[2];
@@ -29,10 +30,10 @@ try {
   bind('um_register_connected', 'void MouseConnected(const char *id, int mode)', (id, mode) => notify({ type: 'connected', id, mode }));
   bind('um_register_disconnected', 'void MouseDisconnected(const char *id, int mode)', (id, mode) => notify({ type: 'disconnected', id, mode }));
   bind('um_register_message', 'void MouseMessage(const char *id, const char *json)', (id, json) => {
-    try { notify({ type: 'message', id, message: JSON.parse(json) }); } catch { notify({ type: 'warning', message: '鼠标返回无效设备信息' }); }
+    try { notify({ type: 'message', id, message: JSON.parse(json) }); } catch { notify({ type: 'warning', message: msg('error.device') }); }
   });
   bind('um_register_audio', 'void MouseAudio(const char *id, const void *pcm, int len)', (id, pcm, len) => {
-    if (len <= 0 || len > 320000 || len % 2) { notify({ type: 'warning', message: '鼠标音频格式无效' }); return; }
+    if (len <= 0 || len > 320000 || len % 2) { notify({ type: 'warning', message: msg('error.audio') }); return; }
     // The SDK buffer expires as soon as this callback returns.
     const audio = Buffer.from(koffi.decode(pcm, 'uint8_t', len));
     if (queued > 100) { notify({ type: 'overflow', id }); return; }
@@ -51,7 +52,7 @@ try {
   await asyncCall(api.init, 0);
   notify({ type: 'ready', version: library.func('const char *um_sdk_version(void)')() });
 } catch {
-  notify({ type: 'fatal', message: '鼠标 SDK 加载失败，请检查系统架构、动态库和运行依赖' });
+  notify({ type: 'fatal', message: msg('error.sdk') });
   process.exitCode = 1; setTimeout(() => process.exit(1), 50);
 }
 async function close() {

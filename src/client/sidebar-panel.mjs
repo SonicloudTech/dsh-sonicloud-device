@@ -28,10 +28,10 @@ export class SidebarPanelPreference {
 }
 
 // 在独立子作用域注册两个座位，返回可卸载的作用域；icon/panel 组件由调用方传入。
-export function mountSidebarPanel(ctx, { icon, panel, props }) {
+export function mountSidebarPanel(ctx, { icon, panel, props, label = () => '声云设备' }) {
   return ctx.inject(['slots'], scope => {
     scope.slots.inject('sidebar.panellist', () => scope.slots.register({
-      name: 'sidebar.panellist', id: SIDEBAR_PANEL_ID, order: 20, label: () => '声云设备',
+      name: 'sidebar.panellist', id: SIDEBAR_PANEL_ID, order: 20, label,
     }, icon));
     scope.slots.inject('main', () => scope.slots.register({
       name: 'main', key: SIDEBAR_PANEL_ID, inject: () => props(),
@@ -40,12 +40,12 @@ export function mountSidebarPanel(ctx, { icon, panel, props }) {
 }
 
 // 按偏好挂载/卸载面板注册，返回清理函数。
-export function attachSidebarPanel(ctx, { icon, panel, props, preferences }) {
+export function attachSidebarPanel(ctx, { icon, panel, props, preferences, label }) {
   let mounted = null;
   const unmount = () => { const scope = mounted; mounted = null; void scope?.dispose(); };
   const sync = () => {
     if (preferences.visible === (mounted !== null)) return;
-    if (preferences.visible) mounted = mountSidebarPanel(ctx, { icon, panel, props });
+    if (preferences.visible) mounted = mountSidebarPanel(ctx, { icon, panel, props, label });
     else unmount();
   };
   sync();

@@ -1,3 +1,4 @@
+import { message as msg } from '../src/shared/i18n.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DevicePreferences } from '../src/client/device-preferences.mjs';
@@ -76,7 +77,7 @@ test('failed autosave rolls back to confirmed settings and permits retry', async
   await first;
   assert.equal(api.requests.length, 1);
   assert.deepEqual(editor.snapshot().form, external.preferences);
-  assert.match(editor.snapshot().error, /未保存.*配置冲突/);
+  assert.match(editor.snapshot().error, /"key":"error\.notSaved"/);
   const retry = editor.change('punctuation', false);
   assert.equal(api.requests[1].revision, 1);
   api.requests[1].resolve(saved(2, api.requests[1].preferences));
@@ -110,7 +111,7 @@ test('editing a saved Baidu URL preserves drafts through device snapshots and re
   assert.equal(editor.snapshot().form.linkUrl, 'https://');
   assert.equal(editor.snapshot().error, '');
   editor.commitLink();
-  assert.match(editor.snapshot().error, /当前修改尚未生效/);
+  assert.match(editor.snapshot().error, /"key":"error\.notSaved"/);
   assert.equal(api.requests.length, 0);
   editor.sync(original);
   assert.equal(editor.snapshot().form.linkUrl, 'https://');
@@ -166,13 +167,13 @@ test('link confirmation toasts report validation, server failure and success onl
   editor.commitLink(); editor.commitLink();
   assert.equal(api.requests.length, 0);
   assert.equal(notices.length, 2);
-  assert.ok(notices.every(([message, kind]) => kind === 'error' && /设置未生效/.test(message)));
+  assert.ok(notices.every(([message, kind]) => kind === 'error' && /"key":"error\.notSaved"/.test(message)));
   editor.change('linkUrl', 'https://www.google.com');
   const failed = editor.commitLink();
   assert.equal(notices.length, 2);
   api.requests[0].resolve({ ok: false, error: { message: '保存失败' } });
   await failed;
-  assert.match(notices[2][0], /保存失败/);
+  assert.match(notices[2][0], /"key":"error\.notSaved"/);
   assert.equal(notices[2][1], 'error');
   assert.equal(editor.confirmed.preferences.mAction, 'enter');
   editor.change('mAction', 'openWebUrl'); editor.change('linkUrl', 'https://www.google.com');
@@ -180,7 +181,7 @@ test('link confirmation toasts report validation, server failure and success onl
   assert.equal(notices.length, 3);
   api.requests[1].resolve(saved(1, api.requests[1].preferences));
   await success;
-  assert.deepEqual(notices[3], ['链接设置成功，已生效', 'success']);
+  assert.deepEqual(notices[3], [msg('settings.linkSaved'), 'success']);
   assert.equal(editor.confirmed.preferences.linkUrl, 'https://www.google.com');
 });
 

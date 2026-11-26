@@ -1,3 +1,4 @@
+import { message as msg, safeMessage } from '../shared/i18n.mjs';
 import { defaultPreferences, preferencesSchema } from '../shared/devices.mjs';
 
 // One editor per SN survives device/page switching and serializes revision-based saves.
@@ -54,10 +55,10 @@ export class DevicePreferences {
     this.linkConfirmation = confirmLink ? this.sequence : undefined;
     const valid = preferencesSchema.safeParse(form);
     this.pending = valid.success;
-    this.publish({ form, linkDirty: false, invalid: !valid.success, notice: '', error: valid.success ? '' : `${valid.error.issues[0].message}，当前修改尚未生效，仍使用已保存的设置。` });
+    this.publish({ form, linkDirty: false, invalid: !valid.success, notice: '', error: valid.success ? '' : msg('error.notSaved', { reason: safeMessage(valid.error.issues[0].message, 'error.settings') }) });
     if (confirmLink && !valid.success) {
       this.linkConfirmation = undefined;
-      this.notify(`${valid.error.issues[0].message}，设置未生效。`, 'error');
+      this.notify(msg('error.notSaved', { reason: safeMessage(valid.error.issues[0].message, 'error.settings') }), 'error');
     }
     if (!this.state.busy && this.pending) return this.save();
   }
@@ -68,20 +69,20 @@ export class DevicePreferences {
         this.pending = false;
         const sequence = this.sequence;
         const result = await this.api.saveDevice(this.sn, this.revision, this.state.form);
-        if (!result.ok) throw new Error(result.error?.message || '设备设置保存失败');
+        if (!result.ok) throw new Error(result.error?.message || msg('error.settings'));
         const saved = result.value;
         this.revision = Math.max(saved.revision, this.confirmed.revision);
         if (saved.revision >= this.confirmed.revision) this.confirmed = saved;
         if (sequence === this.sequence) this.publish({ form: this.confirmed.preferences, notice: saved.message, error: '' });
         if (!this.disposed && this.linkConfirmation === sequence) {
           this.linkConfirmation = undefined;
-          this.notify('链接设置成功，已生效', 'success');
+          this.notify(msg('settings.linkSaved'), 'success');
         }
       }
     } catch (error) {
       this.pending = false;
       this.revision = this.confirmed.revision;
-      const message = `未保存：${error.message}。请重新选择设置后重试。`;
+      const message = msg('error.notSaved', { reason: safeMessage(error.message, 'error.settings') });
       if (!this.disposed && this.linkConfirmation !== undefined) {
         this.linkConfirmation = undefined;
         this.notify(message, 'error');

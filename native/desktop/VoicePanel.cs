@@ -82,11 +82,11 @@ namespace Sonicloud {
         public int Abort() { return context == IntPtr.Zero ? Typer.ErrNotSupported : Typer.typer_session_abort(context); }
         public static string ErrorText(int code) {
             switch (code) {
-                case Typer.ErrInvalidArg: return "文本包含不支持的字符";
-                case Typer.ErrAccessDenied: return "目标窗口拒绝模拟输入";
-                case Typer.ErrWrongState: return "打字会话已中断";
-                case Typer.ErrQueueFull: return "打字任务过多，请稍候";
-                default: return "打字失败（代码 " + code + "）";
+                case Typer.ErrInvalidArg: return "panel.invalidText";
+                case Typer.ErrAccessDenied: return "panel.denied";
+                case Typer.ErrWrongState: return "panel.interrupted";
+                case Typer.ErrQueueFull: return "panel.queueFull";
+                default: return VoiceLocale.Encode("panel.typingError", "code", code);
             }
         }
         static byte[] Bytes(string text) {
@@ -110,7 +110,7 @@ namespace Sonicloud {
         public SingleLineText() { SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true); }
         protected override void OnPaint(PaintEventArgs e) {
             TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor,
-                TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+                TextFormatFlags.WordBreak | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
         }
         protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); Invalidate(); }
     }
@@ -127,13 +127,37 @@ namespace Sonicloud {
             }
         }
     }
+    static class VoiceLocale {
+        public static Dictionary<string, object> Dictionary = new Dictionary<string, object>();
+        static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = 300000 };
+        public static string Encode(string key, string name, object value) {
+            return "sonicloud:" + Json.Serialize(new Dictionary<string, object> { { "key", key }, { "params", new Dictionary<string, object> { { name, value } } } });
+        }
+        public static string Text(string value, int depth = 0) {
+            if (String.IsNullOrEmpty(value)) return "";
+            object translated;
+            if (Dictionary.TryGetValue(value, out translated)) return Convert.ToString(translated);
+            if (depth < 5 && value.StartsWith("sonicloud:", StringComparison.Ordinal)) {
+                try {
+                    var data = Json.Deserialize<Dictionary<string, object>>(value.Substring(10));
+                    string result = Text(Convert.ToString(data["key"]), depth + 1);
+                    foreach (var item in (Dictionary<string, object>)data["params"]) {
+                        string raw = Convert.ToString(item.Value);
+                        result = result.Replace("{" + item.Key + "}", raw.StartsWith("sonicloud:", StringComparison.Ordinal) || Dictionary.ContainsKey(raw) ? Text(raw, depth + 1) : raw);
+                    }
+                    return result;
+                } catch { }
+            }
+            return Dictionary.TryGetValue("error.generic", out translated) ? Convert.ToString(translated) : "Operation failed. Please retry.";
+        }
+    }
     public sealed class VoicePanel : Form {
         readonly SingleLineText text = new SingleLineText();
         readonly Waveform waveform = new Waveform();
         readonly Button close = new Button(), copy = new Button(), submit = new Button();
         readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 300000 };
         readonly System.Windows.Forms.Timer pulse = new System.Windows.Forms.Timer { Interval = 40 };
-        string session = "", preview = "", phase = "", message = "";
+        string session = "", preview = "", phase = "", message = "", copyKey = "panel.copy";
         bool active;
         TyperEngine typer;
         bool sessionTyping;  // typer 会话已 begin 且未 end/abort
@@ -155,8 +179,8 @@ namespace Sonicloud {
         VoicePanel() {
             FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true;
             BackColor = Color.White; Font = new Font("Microsoft YaHei UI", 10);
-            AccessibleName = "声云语音";
-            text.AccessibleName = "语音识别结果";
+            AccessibleName = "Sonicloud Voice";
+            text.AccessibleName = "Speech recognition result";
             close.Text = ""; close.FlatStyle = FlatStyle.Flat; close.FlatAppearance.BorderSize = 0;
             var icon = new Bitmap(16, 16);
             using (var graphics = Graphics.FromImage(icon))
@@ -165,16 +189,16 @@ namespace Sonicloud {
                 pen.StartCap = pen.EndCap = LineCap.Round;
                 graphics.DrawLine(pen, 3, 3, 12, 12); graphics.DrawLine(pen, 12, 3, 3, 12);
             }
-            close.Image = icon; close.AccessibleName = "取消";
-            copy.Text = "复制结果";
-            submit.Text = "一键提交"; submit.AccessibleName = "一键提交";
+            close.Image = icon; close.AccessibleName = "Cancel";
+            copyKey = "panel.copy";
+            submit.Text = "Insert text"; submit.AccessibleName = "Insert text";
             Controls.AddRange(new Control[] { text, waveform, close, copy, submit });
             close.Click += delegate {
                 if (active) Emit(new Dictionary<string, object> { { "event", "cancel" }, { "sessionId", session } });
                 EndSession(); preview = message = ""; pendingSubmit = false; Hide();
             };
             submit.Click += delegate { SubmitPending(); };
-            copy.Click += delegate { try { Clipboard.SetText(preview); copy.Text = "已复制"; } catch { copy.Text = "复制失败"; } };
+            copy.Click += delegate { try { Clipboard.SetText(preview); copyKey = "panel.copied"; Render(); } catch { copyKey = "panel.copyFailed"; Render(); } };
             pulse.Tick += delegate { waveform.Phase += 0.25; waveform.Invalidate(); };
             VisibleChanged += delegate { pulse.Enabled = Visible && active; };
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += DisplayChanged;
@@ -183,24 +207,31 @@ namespace Sonicloud {
         }
         void DisplayChanged(object sender, EventArgs e) { if (!IsDisposed && Visible) BeginInvoke((Action)Render); }
         void Render() {
+            AccessibleName = VoiceLocale.Text("panel.title"); text.AccessibleName = VoiceLocale.Text("panel.result");
+            waveform.AccessibleName = VoiceLocale.Text("panel.processing");
+            copy.Text = VoiceLocale.Text(copyKey); submit.Text = VoiceLocale.Text("panel.submit"); submit.AccessibleName = submit.Text;
             var display = Screen.AllScreens.FirstOrDefault(s => screen != null && s.DeviceName == screen.DeviceName) ?? Screen.PrimaryScreen;
-            var area = display.WorkingArea; var width = Math.Min(720, area.Width - 48); var height = 48;
+            var area = display.WorkingArea; var width = Math.Min(720, area.Width - 48);
+            int buttonWidth = Math.Max(96, Math.Max(TextRenderer.MeasureText(copy.Text, Font).Width, TextRenderer.MeasureText(submit.Text, Font).Width) + 20);
+            buttonWidth = Math.Min(buttonWidth, width / 3);
+            string status = message.Length > 0 ? VoiceLocale.Text(message) : VoiceLocale.Text(phase == "finishing" ? "panel.finishing" : phase == "translating" ? "panel.translating" : "");
+            string displayText = (status + " " + preview).Trim();
+            int textWidth = Math.Max(100, width - 116 - (pendingSubmit ? 2 * buttonWidth + 8 : !active && preview.Length > 0 ? buttonWidth : 0));
+            int height = Math.Min(area.Height / 2, Math.Max(48, TextRenderer.MeasureText(displayText, Font, new Size(textWidth, Int32.MaxValue), TextFormatFlags.WordBreak).Height + 24));
             Bounds = new Rectangle(area.Left + (area.Width - width) / 2, area.Bottom - height - 24, width, height);
-            using (var outline = CapsuleShape.Create(new RectangleF(0, 0, width, height), height / 2f)) {
+            using (var outline = CapsuleShape.Create(new RectangleF(0, 0, width, height), 24)) {
                 var previous = Region; Region = new Region(outline); if (previous != null) previous.Dispose();
             }
             waveform.SetBounds(20, (height - 26) / 2, 23, 26);
             close.SetBounds(width - 44, (height - 28) / 2, 28, 28);
             if (pendingSubmit) {
-                submit.SetBounds(width - 148, (height - 32) / 2, 96, 32);
-                copy.SetBounds(width - 252, (height - 32) / 2, 96, 32);
-            } else copy.SetBounds(width - 146, (height - 32) / 2, 96, 32);
+                submit.SetBounds(width - 52 - buttonWidth, (height - 32) / 2, buttonWidth, 32);
+                copy.SetBounds(width - 60 - 2 * buttonWidth, (height - 32) / 2, buttonWidth, 32);
+            } else copy.SetBounds(width - 52 - buttonWidth, (height - 32) / 2, buttonWidth, 32);
             waveform.Visible = active; submit.Visible = pendingSubmit;
-            copy.Visible = !active && preview.Length > 0; close.AccessibleName = active ? "取消" : "关闭";
+            copy.Visible = !active && preview.Length > 0; close.AccessibleName = VoiceLocale.Text(active ? "panel.cancel" : "panel.close");
             int left = active ? 54 : 22, right = copy.Visible ? copy.Left : close.Left;
-            text.SetBounds(left, 0, Math.Max(0, right - left - 12), height);
-            string status = message.Length > 0 ? message : phase == "finishing" ? "正在整理…" : phase == "translating" ? "正在翻译…" : "";
-            string displayText = (status + " " + preview).Trim();
+            text.SetBounds(left, 12, Math.Max(0, right - left - 12), height - 24);
             text.Text = Regex.Replace(displayText, @"[\r\n\t\u0085\u2028\u2029]+", " ");
             pulse.Enabled = Visible && active;
             Show();
@@ -218,7 +249,7 @@ namespace Sonicloud {
         }
         void HandleTypingError(int code) {
             typingError = true; typingErrorCode = code;
-            message = "未回填：" + TyperEngine.ErrorText(code) + "，可复制结果";
+            message = VoiceLocale.Encode("panel.notInserted", "reason", TyperEngine.ErrorText(code));
             Render();
         }
         // 一键提交：把保留的文本一次性逐字注入点击时聚焦的窗口（浮窗不抢焦点，焦点仍在用户摆好的目标上）。
@@ -226,8 +257,8 @@ namespace Sonicloud {
             if (!pendingSubmit) return;
             pendingSubmit = false;
             string reason = null;
-            if (typer == null || typer.context == IntPtr.Zero) reason = "打字组件不可用";
-            else if (FocusedElementIsPassword()) reason = "目标为密码输入框";
+            if (typer == null || typer.context == IntPtr.Zero) reason = "panel.typingUnavailable";
+            else if (FocusedElementIsPassword()) reason = "panel.password";
             else {
                 int rc = typer.Begin(Typer.ModePerChar);
                 if (rc != 0) reason = TyperEngine.ErrorText(rc);
@@ -239,25 +270,31 @@ namespace Sonicloud {
                 }
             }
             if (reason == null) { preview = message = ""; Hide(); }
-            else { message = "未回填：" + reason + "，可复制结果"; Render(); }
+            else { message = VoiceLocale.Encode("panel.notInserted", "reason", reason); Render(); }
         }
         void HandleCommand(Dictionary<string, object> item) {
             string command = Get(item, "command"), incoming = Get(item, "sessionId"); bool ok = true, inserted = false;
+            if (command == "locale") {
+                object dictionary;
+                if (item.TryGetValue("dictionary", out dictionary) && dictionary is Dictionary<string, object>) VoiceLocale.Dictionary = (Dictionary<string, object>)dictionary;
+                if (Visible) Render();
+                return;
+            }
             if (command == "begin") {
                 session = incoming; preview = message = ""; phase = "connecting"; active = true;
                 string action = Get(item, "action");
                 typingBlocked = false; typingError = false; sessionTyping = false; typingLive = false; pendingSubmit = false;
                 if (action == "voice_input" || action == "translate") {
                     typingLive = action == "voice_input"; // 翻译只在最终译文出来后打字，避免先打原文再整段退格
-                    if (typer == null || typer.context == IntPtr.Zero) { typingBlocked = true; blockedReason = "打字组件不可用"; }
-                    else if (FocusedElementIsPassword()) { typingBlocked = true; blockedReason = "目标为密码输入框"; }
+                    if (typer == null || typer.context == IntPtr.Zero) { typingBlocked = true; blockedReason = "panel.typingUnavailable"; }
+                    else if (FocusedElementIsPassword()) { typingBlocked = true; blockedReason = "panel.password"; }
                     else {
                         int rc = typer.Begin(Typer.ModePerChar);
                         if (rc == 0) sessionTyping = true;
                         else { typingBlocked = true; blockedReason = TyperEngine.ErrorText(rc); }
                     }
                 }
-                screen = Screen.FromPoint(Cursor.Position); copy.Text = "复制结果"; Render();
+                screen = Screen.FromPoint(Cursor.Position); copyKey = "panel.copy"; Render();
             } else if (incoming.Length > 0 && incoming != session) { ok = false; }
             else if (command == "result" && active) {
                 preview = Get(item, "text");
@@ -271,7 +308,7 @@ namespace Sonicloud {
                 }
                 EndSession();
                 if (reason == null) { inserted = true; Hide(); }
-                else { message = "未回填：" + reason + "，可复制结果"; Render(); }
+                else { message = VoiceLocale.Encode("panel.notInserted", "reason", reason); Render(); }
             } else if (command == "event") {
                 switch (Get(item, "type")) {
                     case "preview":
@@ -290,9 +327,9 @@ namespace Sonicloud {
                         EndSession();
                         typingError = false; // 清闩，本次提交允许重新注入
                         pendingSubmit = preview.Length > 0;
-                        message = pendingSubmit ? Get(item, "message") : "没有可输入的内容";
-                        if (message.Length == 0) message = "请打开需要输入界面";
-                        copy.Text = "复制结果"; Render();
+                        message = pendingSubmit ? Get(item, "message") : "panel.noText";
+                        if (message.Length == 0) message = "panel.openInput";
+                        copyKey = "panel.copy"; Render();
                         break;
                     case "cancelled": case "finished":
                         // 空结果收尾（无 result）：实时打出的中间结果用空 partial 修正掉，再结束会话。

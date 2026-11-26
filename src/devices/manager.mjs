@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { randomUUID } from 'node:crypto';
 import { AsyncQueue, PcmPackets } from './queue.mjs';
 import { DeviceStore } from './store.mjs';
@@ -14,14 +15,14 @@ export class DeviceManager {
     Object.assign(this, { sdk, recognize, prepare, action, translate, desktop, screenshot, aiConversation, config });
     this.store = new DeviceStore(credentials);
     this.devices = new Map(); this.clients = new Set(); this.pressed = new Map(); this.pending = Promise.resolve();
-    this.status = '尚未连接 SDK'; this.disposed = false;
+    this.status = msg('status.connecting'); this.disposed = false;
     this.languages = config.recognitionLanguages ?? DEFAULT_LANGUAGES;
     this.dpiLevels = config.dpiLevels ?? { '800': 21, '1200': 32, '1600': 42, '2400': 63 };
     this.dpiReportLevels = config.dpiReportLevels ?? { '800': 0, '1200': 1, '1600': 2, '2400': 3 };
     this.onEvent = event => {
       // Audio is copied in the worker. Process it synchronously in IPC order; commands are serialized separately.
       if (event.type === 'audio') { this.audio(event); return; }
-      this.pending = this.pending.then(() => this.event(event)).catch(() => this.publish({ type: 'notice', message: '设备事件处理失败，请重连设备' }));
+      this.pending = this.pending.then(() => this.event(event)).catch(() => this.publish({ type: 'notice', message: msg('error.device') }));
     };
     this.onFault = message => {
       this.status = message; this.cancel();
@@ -29,7 +30,7 @@ export class DeviceManager {
     };
     if (desktop) {
       desktop.onCancel = id => this.cancel(id);
-      desktop.onFault = () => this.cancel(undefined, '桌面语音浮层已断开，请重新触发');
+      desktop.onFault = () => this.cancel(undefined, msg('error.panel'));
     }
     this.onScreenshotNotice = message => { if (!this.disposed) this.publish({ type: 'notice', message }); };
     screenshot?.on('notice', this.onScreenshotNotice);
@@ -39,7 +40,7 @@ export class DeviceManager {
     if (this.started) return this.started;
     this.started = (async () => {
       try { this.desktop?.start?.(); } catch { /* Key press reports unsupported native presentation. */ }
-      try { await this.sdk.start(); this.status = this.devices.size ? '设备已连接' : '设备服务已启动，正在查找智能鼠标…'; }
+      try { await this.sdk.start(); this.status = this.devices.size ? msg('status.connected') : msg('status.searching'); }
       catch (error) { this.status = error.message; }
       this.snapshot();
     })();
@@ -61,7 +62,7 @@ export class DeviceManager {
   }
   snapshot() { this.publish({ type: 'devices', ...this.view() }); }
   async *watch(clientId, signal) {
-    if (!this.desktop && this.owner) { yield { type: 'notice', message: '智能鼠标已由另一个窗口接管' }; return; }
+    if (!this.desktop && this.owner) { yield { type: 'notice', message: msg('error.busy') }; return; }
     const queue = new AsyncQueue(256); if (!this.desktop) this.owner = clientId; this.clients.add(queue);
     const abort = () => queue.end(true);
     signal.addEventListener('abort', abort, { once: true });
@@ -80,7 +81,7 @@ export class DeviceManager {
       case 'connected': return this.connectDevice(event);
       case 'disconnected': return this.disconnectDevice(event);
       case 'message': return this.deviceMessage(event);
-      case 'overflow': return this.cancelFor(event.id, '鼠标音频处理过慢，本次识别已停止');
+      case 'overflow': return this.cancelFor(event.id, msg('error.audio'));
       case 'warning': return this.publish({ type: 'notice', message: event.message });
       case 'diagnostic':
         if (!this.devices.size) { this.status = event.message; this.snapshot(); }
@@ -92,26 +93,26 @@ export class DeviceManager {
     const stable = isStableSn(id);
     const category = event.deviceType ?? 'smart-mouse';
     const saved = stable && category === 'smart-mouse' ? await this.store.get(id) : null;
-    const device = { id, sn: stable ? id : '', type: category, name: event.name || (category === 'smart-mouse' ? '智能鼠标' : '设备'),
+    const device = { id, sn: stable ? id : '', type: category, name: event.name || '', defaultName: !event.name,
       connection: event.mode === 1 ? 'ble' : 'usb', connectionId: randomUUID(), battery: null,
       identityConfirmed: stable, dpiState: 'unknown', ...saved };
     this.devices.set(id, device);
     this.clearPressed(id);
-    this.status = '设备已连接';
+    this.status = msg('status.connected');
     if (saved?.revision > 0) await this.applyDpi(device);
     this.snapshot();
   }
   disconnectDevice({ id, mode }) {
     const device = this.devices.get(id);
     if (!device || device.connection !== (mode === 1 ? 'ble' : 'usb')) return;
-    this.cancelFor(id, '设备已断开，语音已取消'); this.devices.delete(id); this.clearPressed(id);
-    if (!this.devices.size) this.status = '设备已断开，正在重新查找智能鼠标…';
+    this.cancelFor(id, msg('error.device')); this.devices.delete(id); this.clearPressed(id);
+    if (!this.devices.size) this.status = msg('status.searching');
     this.snapshot();
   }
   async deviceMessage({ id, message }) {
     const device = this.devices.get(id);
-    if (message.type === 'warning') { this.publish({ type: 'notice', message: message.text || '鼠标连接异常' }); return; }
-    if (message.type === 'queueOverflow') { this.cancel(undefined, '鼠标音频丢失，请重新录音'); return; }
+    if (message.type === 'warning') { this.publish({ type: 'notice', message: message.text || msg('error.device') }); return; }
+    if (message.type === 'queueOverflow') { this.cancel(undefined, msg('error.audio')); return; }
     if (!device) return;
     switch (message.type) {
       case 'deviceInfo': return this.updateDeviceInfo(device, message);
@@ -123,7 +124,7 @@ export class DeviceManager {
     if (isStableSn(message.sn) && message.sn !== device.sn) {
       // 只补全临时身份，不合并已确认的设备。
       if (device.identityConfirmed || this.devices.has(message.sn)) {
-        device.identityConfirmed = false; this.cancelFor(device.id, '设备 SN 冲突，请重连');
+        device.identityConfirmed = false; this.cancelFor(device.id, msg('error.device'));
       } else {
         this.devices.delete(device.id); device.sn = message.sn; device.identityConfirmed = true;
         if (device.type === 'smart-mouse') Object.assign(device, await this.store.get(message.sn));
@@ -153,31 +154,31 @@ export class DeviceManager {
   }
   async savePreferences(sn, revision, preferences) {
     const device = [...this.devices.values()].find(item => item.sn === sn && item.identityConfirmed);
-    if (!device || device.type !== 'smart-mouse') throw new Error('设备已离线、SN 未确认或不支持此配置');
+    if (!device || device.type !== 'smart-mouse') throw new Error(msg('error.settings'));
     const connectionId = device.connectionId;
     const dpiChanged = preferences.dpi !== device.preferences.dpi || device.dpiState === 'failed';
     const saved = await this.store.save(sn, revision, preferences);
-    if (this.devices.get(device.id)?.connectionId !== connectionId) { this.snapshot(); return { ...saved, message: '配置已保存，设备离线后需重连应用' }; }
+    if (this.devices.get(device.id)?.connectionId !== connectionId) { this.snapshot(); return { ...saved, message: msg('settings.savedOffline') }; }
     Object.assign(device, saved);
-    let message = '已保存';
+    let message = msg('settings.saved');
     if (dpiChanged) {
-      message = '配置已保存，' + await this.applyDpi(device);
+      message = msg('settings.savedDpi', { reason: await this.applyDpi(device) });
     }
     this.snapshot(); return { ...saved, message };
   }
   async applyDpi(device) {
     const level = this.dpiLevels[device.preferences.dpi];
     try {
-      if (!Number.isInteger(level) || level < 0 || level > 255) throw new Error('此固件未配置 DPI 档位映射');
-      if (await this.sdk.dpi(device.id, level) !== 1) throw new Error('DPI 下发失败');
-      device.dpiState = 'sent'; return 'DPI 指令已下发（设备不返回生效确认）';
+      if (!Number.isInteger(level) || level < 0 || level > 255) throw new Error(msg('keys.dpiFailed'));
+      if (await this.sdk.dpi(device.id, level) !== 1) throw new Error(msg('keys.dpiFailed'));
+      device.dpiState = 'sent'; return msg('settings.dpiSent');
     } catch (error) { device.dpiState = 'failed'; return error.message; }
   }
   async key(device, event) {
     if (this.disposed || device.type !== 'smart-mouse') return;
     if (event.key !== 'capture' && !this.owner && !this.desktop) return;
     if (!device.identityConfirmed) {
-      if (event.action === 'down' || event.action === 'click') this.publish({ type: 'notice', message: '设备身份未确认，请重新连接鼠标' });
+      if (event.action === 'down' || event.action === 'click') this.publish({ type: 'notice', message: msg('error.device') });
       return;
     }
     const key = `${device.id}:${event.key}:${event.index ?? 0}`;
@@ -208,7 +209,7 @@ export class DeviceManager {
     this.pressed.set(key, structuredClone(device.preferences));
     const action = event.key === 'ai' ? 'ai_input' : event.key === 'm' ? device.preferences.mAction : event.key === 'translation' ? 'translate' : device.preferences.speechAction;
     if (!VOICE.has(action)) return;
-    if (this.run) { this.publish({ type: 'notice', message: '其他语音会话正在进行，请稍后重试' }); return; }
+    if (this.run) { this.publish({ type: 'notice', message: msg('error.busy') }); return; }
     let query;
     try {
       query = recognitionQuery(device.preferences, action, this.languages);
@@ -220,30 +221,30 @@ export class DeviceManager {
     };
     run.packets = new PcmPackets(chunk => run.queue.push(chunk));
     this.run = run;
-    if (!this.desktop) run.captureTimer = setTimeout(() => this.fail(run, '界面未响应，请重新打开宿主窗口'), 5000);
+    if (!this.desktop) run.captureTimer = setTimeout(() => this.fail(run, msg('error.connection')), 5000);
     run.durationTimer = setTimeout(() => this.release(run), 600000);
     // Opening the app/client must not block key-up or device-disconnect events.
     if (action === 'ai_input') void this.begin(run, device);
     else await this.begin(run, device);
   }
   async captureScreenshot(trigger = 'ui') {
-    if (this.disposed) throw new Error('插件已关闭，请重新启用后截图');
-    if (!this.screenshot) throw new Error('截图服务不可用，请重新加载插件');
+    if (this.disposed) throw new Error(msg('error.closed'));
+    if (!this.screenshot) throw new Error(msg('error.screenshot'));
     return this.screenshot.capture(trigger);
   }
   async screenshotPermissions(action = 'check') {
-    if (this.disposed) throw new Error('插件已关闭，请重新启用后检查截图权限');
-    if (!this.screenshot?.permissions) throw new Error('截图权限检查不可用，请重新加载插件');
+    if (this.disposed) throw new Error(msg('error.closed'));
+    if (!this.screenshot?.permissions) throw new Error(msg('error.permission'));
     return this.screenshot.permissions(action);
   }
   async typingPermissions(action = 'check') {
-    if (this.disposed) throw new Error('插件已关闭，请重新启用后检查打字权限');
-    if (!this.desktop?.permissions) throw new Error('打字权限检查不可用，请重新加载插件');
+    if (this.disposed) throw new Error(msg('error.closed'));
+    if (!this.desktop?.permissions) throw new Error(msg('error.permission'));
     return this.desktop.permissions(action);
   }
   async prepareAi(run) {
     try {
-      if (!this.aiConversation || !this.desktop) throw new Error('AI 对话功能不可用，请重新加载插件');
+      if (!this.aiConversation || !this.desktop) throw new Error(msg('error.ai'));
       // Activation failure alone must not abort: with the window tray-hidden the renderer lives on and insertion still works.
       try { await this.action('openAi'); } catch { run.aiActivateFailed = true; }
       run.lifetime.signal.throwIfAborted();
@@ -254,12 +255,12 @@ export class DeviceManager {
   async begin(run, device) {
     try {
       if (run.action === 'ai_input') run.aiReady = this.prepareAi(run);
-      if (run.action === 'ai_input' && !this.desktop) throw new Error('AI 对话需要桌面语音浮层');
+      if (run.action === 'ai_input' && !this.desktop) throw new Error(msg('error.ai'));
       if (this.desktop) await this.desktop.begin(run);
       if (this.run !== run || run.closing) return;
       run.service = await this.prepare();
       if (this.run !== run || run.closing) return;
-      if (await this.sdk.source(device.id) !== 1) throw new Error('无法选定鼠标音频源');
+      if (await this.sdk.source(device.id) !== 1) throw new Error(msg('error.audio'));
       if (this.run !== run || run.closing) return;
       if (this.desktop) { run.started = true; void this.process(run); }
       else this.publish({ type: 'request', sessionId: run.id, sn: run.sn, action: run.action });
@@ -274,9 +275,9 @@ export class DeviceManager {
     if (!run || run.deviceId !== event.id || run.audioEnded || this.devices.get(event.id)?.connectionId !== run.connectionId) return;
     try {
       const buffer = Buffer.from(event.data, 'base64');
-      if (buffer.toString('base64') !== event.data || buffer.length > 320000) throw new Error('鼠标音频数据无效');
+      if (buffer.toString('base64') !== event.data || buffer.length > 320000) throw new Error(msg('error.audio'));
       run.bytes += buffer.length;
-      if (!run.ready && run.bytes > 320000) throw new Error('连接等待的鼠标音频超过 10 秒，请重试');
+      if (!run.ready && run.bytes > 320000) throw new Error(msg('error.audio'));
       run.packets.write(buffer);
     } catch (error) { this.fail(run, error.message); }
   }
@@ -287,7 +288,7 @@ export class DeviceManager {
     run.started = true; clearTimeout(run.captureTimer);
     void this.process(run); return true;
   }
-  assertOwner(clientId) { if (!this.owner || this.owner !== clientId) throw new Error('此窗口未接管智能鼠标'); }
+  assertOwner(clientId) { if (!this.owner || this.owner !== clientId) throw new Error(msg('error.busy')); }
   release(run) {
     if (this.run !== run || run.released) return;
     run.released = true;
@@ -298,7 +299,7 @@ export class DeviceManager {
       try { run.audioEnded = true; run.packets.flush(); run.queue.end(); }
       catch (error) { this.fail(run, error.message); }
     }, this.config.tailMs ?? 150);
-    run.uploadTimer = setTimeout(() => this.fail(run, '音频上传结束超时'), 15000);
+    run.uploadTimer = setTimeout(() => this.fail(run, msg('error.timeout')), 15000);
   }
   async process(run) {
     try {
@@ -317,9 +318,9 @@ export class DeviceManager {
         if (event.type === 'complete') { complete = true; break; }
       }
       if (this.run !== run || run.closing) return;
-      if (!complete || !run.released) throw new Error('ASR 连接中断，识别结果未完成');
+      if (!complete || !run.released) throw new Error(msg('error.connection'));
       await this.complete(run);
-    } catch (error) { this.fail(run, error.message || '语音处理失败，请重试'); }
+    } catch (error) { this.fail(run, error.message || msg('error.generic')); }
   }
   async complete(run) {
     let text = formatTranscript(run.transcript.finalText(), run.preferences, run.action);
@@ -343,12 +344,12 @@ export class DeviceManager {
         await this.aiConversation.insert(run, text);
         if (this.run !== run || run.closing) return;
         this.publish(run.aiActivateFailed
-          ? { type: 'failed', sessionId: run.id, message: '窗口未唤起，文字已填入对话草稿，可复制结果' }
+          ? { type: 'failed', sessionId: run.id, message: msg('error.aiWindow') }
           : { type: 'finished', sessionId: run.id });
       } catch (error) {
         // On Windows the panel keeps the text so the user can focus any input and submit it there.
         if (this.desktop?.platform === 'win32') {
-          this.publish({ type: 'submitOffer', sessionId: run.id, text, message: '请打开需要输入界面' });
+          this.publish({ type: 'submitOffer', sessionId: run.id, text, message: msg('panel.openInput') });
           await this.finish(run);
           return;
         }

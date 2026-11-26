@@ -119,3 +119,31 @@ test('Gateway streams AI prepare/insert/release and validates client acknowledge
     life.abort(); await iterator.return();
   } finally { life.abort(); stream?.dispose?.(); await ctx.fiber.dispose(); }
 });
+
+test('Gateway 语言同步校验宿主版本、语种及访问权限，不修改业务配置', async () => {
+  const ctx = new Context(), sdk = new EventEmitter(), applied = [];
+  sdk.close = async () => {};
+  const credentials = new MemoryCredentials(); ctx.provide('credentials', credentials);
+  ctx.provide('remoteAccess', { decide: () => ({ kind: 'deny' }) });
+  const peer = { id: 'locale-owner', ctx, principal: { kind: 'owner' }, signal: new AbortController().signal };
+  let controller;
+  try {
+    await ctx.plugin(TypertRegistry); await ctx.plugin(Gateway, {});
+    const fiber = ctx.plugin({ inject: plugin.inject, apply(scope) {
+      scope.effect(() => scope.typert.register(TYPERT));
+      controller = new plugin.MouseController(scope, {}, { sdk, desktop: { event() {}, close: async () => {}, setLocale: value => applied.push(value) } });
+      controller.locale.attach(() => ({ revision: 7, value: { preference: 'pt' } }));
+    } });
+    await fiber; await controller.initialized;
+    const before = structuredClone([...credentials.records]);
+    const call = (request, selectedPeer = peer) => ctx.typertGateway.invoke({ namespace: 'asr', method: 'syncLocale', args: { request }, peer: selectedPeer });
+    assert.equal(await call({ active: 'pt', resolved: 'pt', revision: 7 }), true);
+    assert.equal(await call({ active: 'zh', resolved: 'zh', revision: 6 }), false);
+    await assert.rejects(call({ active: 'pt', resolved: 'pt-BR', revision: 7 }));
+    await assert.rejects(call({ active: 'pt', resolved: 'pt', revision: -1 }));
+    await assert.rejects(call({ active: 'pt', resolved: 'pt', revision: 7, ignored: true }));
+    await assert.rejects(call({ active: 'pt', resolved: 'pt', revision: 7 }, { ...peer, principal: { kind: 'guest' } }), /access denied/);
+    assert.deepEqual(applied, ['pt']); assert.deepEqual([...credentials.records], before);
+    await fiber.dispose(); assert.equal(ctx.typert.local.get('asr/syncLocale'), undefined);
+  } finally { await ctx.fiber.dispose(); }
+});

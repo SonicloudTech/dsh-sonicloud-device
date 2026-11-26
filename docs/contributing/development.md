@@ -80,8 +80,10 @@ dsh plugin --profile desktop add /绝对路径/项目目录/artifacts/实际包�
 | `src/shared/` | 前后端共享协议、语言映射和鼠标设置定义 |
 | `native/` | 原生 SDK、依赖库、来源与许可证 |
 | `scripts/`、`tests/` | 构建、开发辅助脚本与自动化测试 |
-| `docs/specs/` | [插件规格](../specs/smart-mouse-plugin.md)、[鼠标设置](../specs/mouse-settings.md)与[发布规格](../specs/ci-cd.md) |
-| `dist/`、`work/` | 正式前端构建产物与本地开发产物，不提交 |
+| `docs/specs/` | [插件规格](../specs/smart-mouse-plugin.md)、[鼠标设置](../specs/mouse-settings.md)、[多语言规格](../specs/multilingual.md)与[发布规格](../specs/ci-cd.md) |
+| `dist/`、`locale/`、`work/` | 前端、插件元数据与本地开发产物，不提交 |
+
+界面翻译维护在 `src/shared/locales/`，新增或修改文案须同步 8 种语言及占位参数。`npm run build` 从 README 生成插件管理页的 `locale/` 元数据。界面语言与业务识别/翻译语种分开维护。
 
 ## 桌面语音浮层
 

@@ -1,3 +1,5 @@
+import { HostLocale, attachHostLocale } from './locale.mjs';
+import { message as msg, safeMessage } from '../shared/i18n.mjs';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ServiceStore } from './store.mjs';
 import { createTokenProvider } from '../asr/auth.mjs';
@@ -28,11 +30,13 @@ export class MouseController extends TypertRemoteService {
       sdk: dependencies.sdk ?? new MouseSdk(config.native), ...dependencies, aiConversation: this.aiConversation,
       prepare: () => this.service(), recognize: request => this.recognize(request),
       translate: request => this.translate(request) });
+    this.locale = new HostLocale(locale => this.manager.desktop?.setLocale(locale));
     ctx.effect(() => () => {
       this.lifetime.abort(); this.providers.clear(); return this.manager.close();
     });
   }
   async service() { await this.initialized; return { ...await this.store.resolve(), ...this.dependencies.endpoints }; }
+  syncLocale(request) { return this.locale.accept(request); }
   catalog() { return this.store.catalog(); }
   devices() { return this.manager.view(); }
   captureScreenshot() { return this.manager.captureScreenshot(); }
@@ -80,8 +84,8 @@ export class MouseController extends TypertRemoteService {
       }
     } catch (error) {
       if (!signal.aborted && !this.lifetime.signal.aborted) yield { type: 'error',
-        message: connection.signal.aborted ? 'ASR 连接超时，请稍后重试'
-          : /^(Token |设备|License |ASR )/.test(error.message) ? error.message : 'ASR 服务暂不可用，请稍后重试' };
+        message: connection.signal.aborted ? msg('error.timeout')
+          : safeMessage(error.message, 'error.connection') };
     } finally { clearTimeout(timer); }
   }
   async translate({ sn, service: capturedService, ...request }) {
@@ -95,6 +99,7 @@ export class MouseController extends TypertRemoteService {
 export async function apply(ctx, config = {}) {
   ctx.effect(() => ctx.typert.register(TYPERT));
   const controller = new MouseController(ctx, config, { desktop: new DesktopPresentation(), screenshot: new ScreenshotService() });
+  attachHostLocale(ctx, controller);
   await controller.initialized;
   void controller.manager.start();
 }

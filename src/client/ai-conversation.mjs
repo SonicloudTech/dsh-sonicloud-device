@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { waitForRetry } from './retry.mjs';
 
 // Only public Harness session/navigation/input services are used; no DOM focus required.
@@ -24,7 +25,7 @@ export class AiConversationClient {
       if (!recent || time > recentTime) { recent = item; recentTime = time; }
     }
     const workspace = recent ?? await workspaces.initializeDefault(signal);
-    if (!workspace) throw new Error('没有可用的工作区');
+    if (!workspace) throw new Error(msg('error.workspace'));
     return workspace;
   }
   async prepare(sessionId, expiresAt = Infinity) {
@@ -41,14 +42,14 @@ export class AiConversationClient {
     signal.throwIfAborted();
     const workspace = reuse ? undefined : await this.workspace(current, signal);
     signal.throwIfAborted();
-    if (Date.now() >= expiresAt) throw new Error('AI 对话准备超时');
+    if (Date.now() >= expiresAt) throw new Error(msg('error.timeout'));
     const id = reuse ? current.id : await sessions.create({ workspaceId: workspace.workspaceId });
     signal.throwIfAborted();
-    if (Date.now() >= expiresAt) throw new Error('AI 对话准备超时');
+    if (Date.now() >= expiresAt) throw new Error(msg('error.timeout'));
     target.reference = sessions.retain(id, { source: 'controllerOperation', signal });
     await target.reference.ready;
     signal.throwIfAborted();
-    if (Date.now() >= expiresAt) throw new Error('AI 对话准备超时');
+    if (Date.now() >= expiresAt) throw new Error(msg('error.timeout'));
     if (!reuse) uiWorkspace.openSession(id);
     await this.view?.ready(id, signal, expiresAt);
   }
@@ -68,13 +69,13 @@ export class AiConversationClient {
     }
     await this.view?.ready(reference.sessionId, target.lifetime.signal, expiresAt);
     target.lifetime.signal.throwIfAborted();
-    if (Date.now() >= expiresAt) throw new Error('AI 对话填充超时');
+    if (Date.now() >= expiresAt) throw new Error(msg('error.timeout'));
     const result = conversation.input.requestDraftInitialization(reference.binding, { prompt: text, whenDraftExists: 'append' });
     target.inserted = result === 'applied';
     if (target.inserted && autoSend) {
       target.lifetime.signal.throwIfAborted();
-      if (Date.now() >= expiresAt) throw new Error('AI 对话自动发送超时');
-      if (!this.view?.submit(reference.sessionId)) throw new Error('AI 对话自动发送不可用');
+      if (Date.now() >= expiresAt) throw new Error(msg('error.timeout'));
+      if (!this.view?.submit(reference.sessionId)) throw new Error(msg('error.ai'));
     }
     return target.inserted;
   }
@@ -87,7 +88,7 @@ export class AiConversationClient {
     if (event.operation === 'release') { this.release(event.sessionId); return; }
     let ok = false;
     try {
-      if (Date.now() >= event.expiresAt) throw new Error('AI 对话请求已过期');
+      if (Date.now() >= event.expiresAt) throw new Error(msg('error.ai'));
       if (event.operation === 'prepare') { await this.prepare(event.sessionId, event.expiresAt); ok = this.targets.has(event.sessionId); }
       else if (event.operation === 'insert') ok = await this.insert(event.sessionId, event.text, event.expiresAt, event.autoSend === true);
     } catch { this.release(event.sessionId); }

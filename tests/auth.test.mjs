@@ -8,7 +8,7 @@ const config = { sn: 'FF14A6252500008B' };
 
 test('SN-only POST, concurrent cache sharing, invalidation and per-device isolation', async () => {
   assert.deepEqual(createTokenRequest({ ...config, ignored: 'unused' }), config);
-  for (const sn of ['', 'usb-temp', '__proto__', undefined]) assert.throws(() => createTokenRequest({ sn }), /身份/);
+  for (const sn of ['', 'usb-temp', '__proto__', undefined]) assert.throws(() => createTokenRequest({ sn }), /"key":"error\.device"/);
   let calls = 0;
   const fetchImpl = async (url, options) => {
     calls++; assert.equal(url, 'https://dsh_device.sonicrhino.cc/api/open.sign/generate');
@@ -38,11 +38,11 @@ test('expiry uses server seconds and failures are never cached', async () => {
   for (const data of [undefined, {}, { token: '' }, { token: 'x' }, { token: 'x', expire_time: '9999999999' }, { token: 'x', expire_time: 0 }]) {
     let count = 0;
     const get = createTokenProvider(config, async () => { count++; return { ok: true, json: async () => ({ code: 0, data }) }; });
-    await assert.rejects(get(), /无效|过期/); await assert.rejects(get()); assert.equal(count, 2);
+    await assert.rejects(get(), /"key":"error\.auth"/); await assert.rejects(get()); assert.equal(count, 2);
   }
   for (const [code, ok] of [[4001, false], [1001, true], [1002, true], [1008, true]]) {
     const get = createTokenProvider(config, async () => ({ ok, json: async () => ({ code }) }));
-    await assert.rejects(get(), /身份|参数|鉴权|License/);
+    await assert.rejects(get(), /"key":"error\.(?:device|auth|deviceLimit)"/);
   }
 });
 

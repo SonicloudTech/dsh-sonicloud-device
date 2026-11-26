@@ -1,3 +1,4 @@
+import { message as msg } from '../src/shared/i18n.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -192,7 +193,7 @@ test('no available workspace fails without creating an unusable conversation', a
   const ui = harness({ current: null, workspaces: [] });
   const client = new AiConversationClient({}, ui.services);
   try {
-    await assert.rejects(client.prepare('missing'), /没有可用的工作区/);
+    await assert.rejects(client.prepare('missing'), /"key":"error\.workspace"/);
     assert.deepEqual(ui.created, []); assert.deepEqual(ui.opened, []);
   } finally { client.dispose(); }
 });
@@ -255,7 +256,7 @@ test('activation failure alone still fills the draft and reports where the text 
     assert.equal(s.drafts.get('existing'), '已有草稿\n\n语音结果');
     assert.deepEqual(s.submitted, [['existing', '已有草稿\n\n语音结果']]);
     assert.ok(s.events.some(e => e.type === 'preview' && e.text === '语音结果'));
-    assert.ok(s.events.some(e => e.type === 'failed' && e.message === '窗口未唤起，文字已填入对话草稿，可复制结果'));
+    assert.ok(s.events.some(e => e.type === 'failed' && e.message === msg('error.aiWindow')));
     assert.equal(s.events.some(e => e.type === 'finished'), false);
   } finally { await s.stop(); }
 });
@@ -268,7 +269,7 @@ test('Windows insertion failure keeps the recognized text for one-click submit i
     const offer = s.events.find(e => e.type === 'submitOffer');
     assert.ok(offer, 'a submit offer must reach the panel');
     assert.equal(typeof offer.sessionId, 'string'); assert.ok(offer.sessionId.length > 0);
-    assert.equal(offer.text, '语音结果'); assert.equal(offer.message, '请打开需要输入界面');
+    assert.equal(offer.text, '语音结果'); assert.equal(offer.message, msg('panel.openInput'));
     assert.equal(s.events.some(e => e.type === 'failed'), false);
     assert.equal(s.events.some(e => e.type === 'finished'), false);
   } finally { await s.stop(); }
@@ -307,7 +308,7 @@ test('bridge waits for a renderer, validates acknowledgements, bounds timeouts a
     assert.equal(bridge.answer('window', request.requestId, true), true); await prepared;
     assert.equal(bridge.answer('window', request.requestId, true), false);
     const timeout = bridge.insert(run, 'timeout');
-    await assert.rejects(timeout, /未响应/); assert.equal(bridge.sessions.size, 0);
+    await assert.rejects(timeout, /"key":"error\.ai"/); assert.equal(bridge.sessions.size, 0);
     life.abort(); await stream.return();
     assert.equal(bridge.requests.size, 0);
   } finally { life.abort(); bridge.close(); }
@@ -397,13 +398,13 @@ test('cancellation and timeout while waiting for the composer remove listeners a
   const s = visibleHarness({ panel: 'files' });
   try {
     const preparing = s.client.prepare('cancelled', Date.now() + 500);
-    const cancelled = assert.rejects(preparing, /取消/);
+    const cancelled = assert.rejects(preparing, /"key":"error\.cancelled"/);
     await until(() => s.opened.length);
     s.client.release('cancelled'); await cancelled;
     s.view.mount('new-1', {});
     assert.equal(await s.client.insert('cancelled', '迟到文字'), false);
     s.navigate('other', 'files');
-    await assert.rejects(s.client.prepare('timeout', Date.now() + 15), /未就绪/);
+    await assert.rejects(s.client.prepare('timeout', Date.now() + 15), /"key":"error\.ai"/);
     assert.equal(s.inserted.length, 0); assert.equal(s.view.listeners.size, 0);
   } finally { s.dispose(); }
 });

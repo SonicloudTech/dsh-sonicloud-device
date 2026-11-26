@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 // Settings is a modal layer, independent of layout.panelInfo. Composer readiness
 // is reported by the session-scoped slot, not inferred from a navigation call.
 export class AiConversationView {
@@ -24,9 +25,9 @@ export class AiConversationView {
         error ? reject(error) : resolve();
       };
       const changed = () => { if (check()) finish(); };
-      const aborted = () => finish(new Error('AI 语音会话已取消'));
+      const aborted = () => finish(new Error(msg('error.cancelled')));
       const observer = new this.document.defaultView.MutationObserver(changed);
-      const timer = setTimeout(() => finish(new Error('AI 对话输入框未就绪')), Math.max(0, Math.min(10000, expiresAt - Date.now())));
+      const timer = setTimeout(() => finish(new Error(msg('error.ai'))), Math.max(0, Math.min(10000, expiresAt - Date.now())));
       observer.observe(this.document.body, { childList: true, subtree: true, attributes: true });
       this.listeners.add(changed); signal.addEventListener('abort', aborted, { once: true });
       changed();

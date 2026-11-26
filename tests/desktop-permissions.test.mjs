@@ -40,15 +40,15 @@ test('打字权限仅在 Mac 查询，只有显式授权操作才请求系统', 
       assert.equal(calls.at(-1).command, 'permissions');
     }
     assert.ok(calls.every(call => call.command !== 'begin'));
-    await assert.rejects(mac.permissions('invalid'), /不支持/);
+    await assert.rejects(mac.permissions('invalid'), /"key":"error\.permission"/);
   } finally { await mac.close(); }
-  await assert.rejects(mac.permissions(), /已关闭/);
+  await assert.rejects(mac.permissions(), /"key":"error\.closed"/);
 });
 
 test('旧语音组件不会被误报为已获得打字权限', async () => {
   const panel = new DesktopPresentation({ platform: 'darwin' });
   panel.request = async () => true;
-  await assert.rejects(panel.permissions(), /状态不可用/);
+  await assert.rejects(panel.permissions(), /"key":"error\.permission"/);
 });
 
 test('打字权限查询超时不会终止正在使用的语音组件', async () => {
@@ -65,7 +65,7 @@ test('打字权限查询超时不会终止正在使用的语音组件', async ()
   panel.onFault = () => { faults++; };
   try {
     await panel.begin({ id: 'active', action: 'voice_input' });
-    await assert.rejects(panel.permissions(), /超时/);
+    await assert.rejects(panel.permissions(), /"key":"error\.timeout"/);
     assert.equal(killed, false); assert.equal(faults, 0); assert.equal(panel.child, child);
   } finally { await panel.close(); }
 });

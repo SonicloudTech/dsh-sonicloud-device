@@ -1,3 +1,4 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -44,9 +45,9 @@ export async function diagnoseUsb(workerPid, { platform = process.platform, exec
   const result = parseUsbOwners(stdout, workerPid);
   if (result.owners.length) {
     const names = [...new Set(result.owners.map(item => item.name))].join('、');
-    return `鼠标 USB 数据接口被 ${names} 占用，请退出该应用；释放后会自动重试连接。`;
+    return msg('status.occupied', { names });
   }
   return result.receiverPresent
-    ? '已检测到 2.4G 接收器，正在等待鼠标响应。请确认鼠标已开机并切到 2.4G 模式。'
-    : '正在查找智能鼠标，请插入 2.4G 接收器或连接蓝牙。';
+    ? msg('status.receiver')
+    : msg('status.searching');
 }

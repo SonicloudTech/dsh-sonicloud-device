@@ -1,3 +1,4 @@
+import { message as msg, nativeDictionary, resolveLocale, safeMessage } from '../shared/i18n.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -7,10 +8,10 @@ import { chmodSync, existsSync } from 'node:fs';
 export class DesktopPresentation {
   constructor({ platform = process.platform, arch = process.arch, launch = spawn, timeoutMs = 10000 } = {}) {
     Object.assign(this, { platform, arch, launch, timeoutMs });
-    this.requests = new Map(); this.sequence = 0;
+    this.requests = new Map(); this.sequence = 0; this.locale = 'en';
   }
   start() {
-    if (this.closed) throw new Error('桌面语音浮层已关闭');
+    if (this.closed) throw new Error(msg('error.closed'));
     if (this.child) return;
     const root = new URL('../../native/desktop/', import.meta.url);
     let file, args = [];
@@ -21,7 +22,7 @@ export class DesktopPresentation {
     }
     else if (this.platform === 'win32') {
       file = 'powershell.exe'; args = ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('windows.ps1', root))];
-    } else throw new Error('当前平台不支持桌面语音浮层');
+    } else throw new Error(msg('error.panel'));
     const child = this.launch(file, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.child = child;
     const lines = createInterface({ input: child.stdout });
@@ -33,19 +34,24 @@ export class DesktopPresentation {
       if (pending) {
         clearTimeout(pending.timer); this.requests.delete(message.id);
         if (message.ok) pending.resolve(message.value);
-        else pending.reject(new Error(message.message || '桌面语音浮层操作失败'));
+        else pending.reject(new Error(message.message || msg('error.panel')));
       }
     });
     const failed = () => {
       if (this.child !== child) return;
       this.child = undefined; lines.close();
-      for (const { reject, timer } of this.requests.values()) { clearTimeout(timer); reject(new Error('桌面语音浮层不可用，请检查安装并重试')); }
+      for (const { reject, timer } of this.requests.values()) { clearTimeout(timer); reject(new Error(msg('error.panel'))); }
       this.requests.clear();
       if (!this.closed) this.onFault?.();
     };
     child.once('error', failed); child.once('exit', failed);
     child.stdin.on('error', failed);
     child.stderr.resume();
+    this.setLocale(this.locale);
+  }
+  setLocale(locale) {
+    this.locale = resolveLocale(locale);
+    this.send({ command: 'locale', language: this.locale, dictionary: nativeDictionary(this.locale) });
   }
   send(message) {
     if (!this.child || this.closed) return;
@@ -56,7 +62,7 @@ export class DesktopPresentation {
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.requests.delete(id); reject(new Error('桌面语音浮层响应超时，请重试'));
+        this.requests.delete(id); reject(new Error(msg('error.timeout')));
         if (killOnTimeout) this.child?.kill();
       }, this.timeoutMs);
       this.requests.set(id, { resolve, reject, timer }); this.send({ ...message, id });
@@ -67,12 +73,12 @@ export class DesktopPresentation {
     await this.request({ command: 'begin', sessionId: run.id, action: run.action });
   }
   async permissions(action = 'check') {
-    if (!['check', 'accessibility', 'refresh'].includes(action)) throw new Error('不支持此打字权限操作');
-    if (this.closed) throw new Error('桌面语音浮层已关闭');
+    if (!['check', 'accessibility', 'refresh'].includes(action)) throw new Error(msg('error.permission'));
+    if (this.closed) throw new Error(msg('error.closed'));
     if (this.platform !== 'darwin') return { supported: false, accessibility: true, helperApp: '' };
     const value = await this.request({ command: 'permissions', action }, { killOnTimeout: false });
     if (!value || value.supported !== true || typeof value.accessibility !== 'boolean' || typeof value.helperApp !== 'string')
-      throw new Error('打字权限状态不可用，请更新插件后重试');
+      throw new Error(msg('error.permission'));
     return value;
   }
   event(event) {
@@ -80,14 +86,14 @@ export class DesktopPresentation {
     if (event.sessionId && event.sessionId !== this.sessionId) return;
     // Do not launch a native window for background device discovery messages.
     if (!this.child) return;
-    this.send({ command: 'event', ...event });
+    this.send({ command: 'event', ...event, ...(event.message ? { message: safeMessage(event.message) } : {}) });
   }
   async complete(run, text) {
     return this.request({ command: 'result', sessionId: run.id, text });
   }
   async close() {
     this.closed = true;
-    for (const { reject, timer } of this.requests.values()) { clearTimeout(timer); reject(new Error('桌面语音浮层已关闭')); }
+    for (const { reject, timer } of this.requests.values()) { clearTimeout(timer); reject(new Error(msg('error.closed'))); }
     this.requests.clear();
     const child = this.child; this.child = undefined;
     if (child) await new Promise(resolve => {

@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/host/index.mjs",
     "./client": "./dist/client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "src/asr",
@@ -24,7 +25,8 @@
     "native",
     "docs",
     "CHANGELOG.md",
-    "CHANGELOG.zh.md"
+    "CHANGELOG.zh.md",
+    "locale"
   ],
   "dsh": {
     "bundle": {

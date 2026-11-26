@@ -1,11 +1,21 @@
+import { message as msg } from '../shared/i18n.mjs';
 import { DevicePreferences } from './device-preferences.mjs';
 import { waitForRetry } from './retry.mjs';
 
 export class DeviceController {
   editors = new Map();
   listeners = new Set();
-  state = { status: '正在连接设备服务…', devices: [], recognitionLanguages: [], translationReady: false };
-  constructor(api, { retryDelayMs = 1000 } = {}) { this.api = api; this.retryDelayMs = retryDelayMs; this.clientId = crypto.randomUUID(); this.lifetime = new AbortController(); }
+  state = { status: msg('status.connecting'), devices: [], recognitionLanguages: [], translationReady: false };
+  constructor(api, { retryDelayMs = 1000, locale } = {}) {
+    this.api = api; this.locale = locale; this.localeCleanups = [];
+    this.retryDelayMs = retryDelayMs; this.clientId = crypto.randomUUID(); this.lifetime = new AbortController();
+    if (locale) {
+      const sync = () => { void locale.sync(api).catch(() => {}); };
+      this.localeCleanups.push(locale.subscribe(sync));
+      if (locale.form) this.localeCleanups.push(locale.form.subscribe(sync));
+      sync();
+    }
+  }
   subscribe = listener => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   snapshot = () => this.state;
   preferences(device) {
@@ -22,7 +32,7 @@ export class DeviceController {
     const busyKey = `${kind}PermissionBusy`, errorKey = `${kind}PermissionError`, messageKey = `${kind}PermissionMessage`;
     const isTyping = kind === 'typing';
     const helper = isTyping ? 'Sonicloud Voice' : 'screenhelper';
-    const fallback = `${isTyping ? '打字' : '截图'}权限检查失败，请重试`;
+    const fallback = msg('error.permission');
     if (this.lifetime.signal.aborted || typeof this.api[method] !== 'function') return undefined;
     const epoch = this.permissionEpoch ?? 0;
     if (this[requestKey]?.epoch === epoch) return this[requestKey].promise;
@@ -38,12 +48,12 @@ export class DeviceController {
           || typeof permissions.helperApp !== 'string') throw new Error(result?.error?.message || fallback);
         let message;
         const missing = !permissions.accessibility || (!isTyping && !permissions.screenRecording);
-        if (action === 'screen' || action === 'accessibility') message = `请在系统弹窗或“隐私与安全性”中为 ${helper} 完成授权，再点击“已授权，重新检查”。如系统要求重启，请按提示操作。`;
-        else if (action === 'refresh' && permissions.supported && (isTyping ? !permissions.accessibility : !permissions.screenRecording)) message = '尚未获得所需权限；如刚完成授权，请按系统提示重启后再检查。';
+        if (action === 'screen' || action === 'accessibility') message = msg('permission.requested', { helper });
+        else if (action === 'refresh' && permissions.supported && (isTyping ? !permissions.accessibility : !permissions.screenRecording)) message = msg('permission.pending');
         this.publish({ [method]: permissions, [messageKey]: message });
         if (automatic && permissions.supported && missing && !this.permissionPrompted) {
           this.permissionPrompted = true;
-          this.notice('macOS 首次使用时，请到“声云设备”查看并完成所需的系统授权。', 'info');
+          this.notice(msg('permission.firstUse'), 'info');
         }
         return permissions;
       } catch (error) {
@@ -63,15 +73,15 @@ export class DeviceController {
   async captureScreenshot() {
     if (this.lifetime.signal.aborted || this.state.screenshotBusy) return false;
     if (this.state.screenshotPermissionError || (this.state.screenshotPermissions?.supported && !this.state.screenshotPermissions.screenRecording)) {
-      this.notice(this.state.screenshotPermissionError || '请先为 screenhelper 授予屏幕录制权限，再重新检查'); return false;
+      this.notice(this.state.screenshotPermissionError || msg('error.screenPermission')); return false;
     }
     this.publish({ screenshotBusy: true });
     try {
       const result = await this.api.captureScreenshot();
-      if (!result.ok || !result.value) throw new Error(result.error?.message || '截图启动失败，请重试');
+      if (!result.ok || !result.value) throw new Error(result.error?.message || msg('error.screenshot'));
       return true;
     } catch (error) {
-      if (!this.lifetime.signal.aborted) this.notice(error.message || '截图启动失败，请重试');
+      if (!this.lifetime.signal.aborted) this.notice(error.message || msg('error.screenshot'));
       return false;
     } finally {
       if (!this.lifetime.signal.aborted) this.publish({ screenshotBusy: false });
@@ -95,16 +105,17 @@ export class DeviceController {
       finally { this.stream?.dispose?.(); this.stream = undefined; }
       if (signal.aborted) return;
       this.permissionEpoch++;
-      this.publish({ status: '设备服务连接中断，正在重新连接…', devices: [],
+      this.publish({ status: msg('status.reconnecting'), devices: [],
         ...(typeof this.api.screenshotPermissions === 'function' ? { screenshotPermissions: undefined,
-          screenshotPermissionBusy: false, screenshotPermissionError: '设备服务连接中断，连接恢复后会重新检查截图权限' } : {}),
+          screenshotPermissionBusy: false, screenshotPermissionError: msg('status.reconnecting') } : {}),
         ...(typeof this.api.typingPermissions === 'function' ? { typingPermissions: undefined,
-          typingPermissionBusy: false, typingPermissionError: '设备服务连接中断，连接恢复后会重新检查打字权限' } : {}) });
+          typingPermissionBusy: false, typingPermissionError: msg('status.reconnecting') } : {}) });
       await waitForRetry(signal, this.retryDelayMs);
     }
   }
   async event(event) {
     if (event.type === 'devices') {
+      void this.locale?.sync(this.api).catch(() => {});
       const { type, ...state } = event;
       for (const device of event.devices) this.editors.get(device.sn)?.sync(device);
       this.publish(state); return;
@@ -112,6 +123,7 @@ export class DeviceController {
     if (event.type === 'notice') this.notice(event.message);
   }
   dispose() {
+    for (const dispose of this.localeCleanups) dispose();
     this.lifetime.abort(); this.stream?.dispose?.(); this.listeners.clear();
     for (const editor of this.editors.values()) editor.dispose();
     this.editors.clear();
